@@ -1,12 +1,15 @@
+import sys
 import asyncio
 import websockets
 
 from src.message import Message, MessageType
 from src.analyzer import Analyzer
 
+WS_END = ""
+ZMQ_END = ""
 
 async def serve():
-    uri = "ws://10.208.104.9:8080/?mac=02:42:ac:14:00:01"
+    uri = "ws://{}/?mac=02:42:ac:14:00:01&expid=3".format(WS_END)
     async with websockets.connect(uri) as websocket:
         # 建立 WebSocket 链接后，接收自己的ID信息
         raw = await websocket.recv()
@@ -31,9 +34,14 @@ async def serve():
                 continue
             print(str(msg.body()))
 
-            analyzer = Analyzer(mid, my_id, msg.sender())
+            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender())
             analyzer.start()
 
 
 if __name__ == "__main__":
-    asyncio.run(serve())
+    if len(sys.argv) < 3:
+        print("usage main.py WS_END ZMQ_END")
+    else:
+        WS_END = sys.argv[1]
+        ZMQ_END = sys.argv[2]
+        asyncio.run(serve())
