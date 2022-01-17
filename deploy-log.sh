@@ -1,4 +1,6 @@
 docker build -t registry.cn-beijing.aliyuncs.com/zhengsj/hongbao:loganalyzer .
+docker push registry.cn-beijing.aliyuncs.com/zhengsj/hongbao:loganalyzer
+
 
 docker pull registry.cn-beijing.aliyuncs.com/zhengsj/hongbao:loganalyzer
 
