@@ -24,16 +24,17 @@ LOG_SERVERS = [
 
 
 class Analyzer(threading.Thread):
-    def __init__(self, zmq_end, mid, sender, receiver):
+    def __init__(self, zmq_end, mid, sender, receiver, servers):
         super().__init__()
         self.zmq_end = zmq_end
+        self.servers = servers
         self.mid = mid
         self.sender = sender
         self.receiver = receiver
 
     def run(self):
         log_data = dict()
-        for server in LOG_SERVERS:
+        for server in self.servers:
             log_text = ""
             resp = requests.get(server)
             log_text += resp.text.strip() + '\n'
@@ -220,6 +221,7 @@ def analyze_path(log_data):
             station = 1
         else:
             print("Can not recognize message ", msg_id)
+            continue
 
         if logs[7].logger == "BJ-Machn-0":
             machine = 0
@@ -231,6 +233,7 @@ def analyze_path(log_data):
             machine = 3
         else:
             print("Can not recognize message ", msg_id)
+            continue
 
         path[station][machine] += 1
     return path
@@ -240,9 +243,9 @@ from PIL import Image, ImageFont, ImageDraw
 
 
 def analyze_logs(log_data):
-    img = Image.open("base.jpg")
+    img = Image.open("src/base.jpg")
     draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype("OpenSans-Bold.ttf", 100)
+    font = ImageFont.truetype("src/OpenSans-Bold.ttf", 100)
 
     from datetime import datetime
     now = datetime.now()

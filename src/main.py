@@ -1,4 +1,5 @@
 import sys
+import json
 import asyncio
 import websockets
 
@@ -7,6 +8,7 @@ from src.analyzer import Analyzer
 
 WS_END = ""
 ZMQ_END = ""
+LOG_SERVERS=""
 
 async def serve():
     uri = "ws://{}/?mac=02:42:ac:14:00:01&expid=3".format(WS_END)
@@ -34,14 +36,19 @@ async def serve():
                 continue
             print(str(msg.body()))
 
-            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender())
+            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender(), LOG_SERVERS)
             analyzer.start()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("usage main.py WS_END ZMQ_END")
+    if len(sys.argv) < 2:
+        print("usage main.py CONFIG_FILE")
     else:
-        WS_END = sys.argv[1]
-        ZMQ_END = sys.argv[2]
+        with open(sys.argv[1], "r") as f:
+            text = f.read()
+            conf = json.loads(text)
+            WS_END = conf["msws"]
+            ZMQ_END = conf["mszmq"]
+            LOG_SERVERS = conf["loggers"]
+            print(WS_END, ZMQ_END, LOG_SERVERS)
         asyncio.run(serve())

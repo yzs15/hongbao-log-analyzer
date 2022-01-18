@@ -6,4 +6,6 @@ RUN pip3 install websockets requests pyzmq Pillow
 
 COPY ./ /hongbao-log
 
+WORKDIR /hongbao-log
+
 CMD ["python3", "/hongbao-log/src/main.py"]
