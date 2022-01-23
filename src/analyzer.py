@@ -6,33 +6,23 @@ import threading
 
 FULL = (1 << 8) - 1
 
-LOG_SERVERS = [
-    "http://192.168.143.3:8091",
-    "http://192.168.143.5:8091",
-    "http://192.168.143.1:8080",
-    "http://192.168.143.2:8080",
-    "http://192.168.143.3:8080",
-    "http://192.168.143.4:8080",
-    "http://192.168.143.5:8080",
-    # "http://10.208.104.9:5555/",
-    # "http://58.213.121.2:10024/",
-    # "http://58.213.121.2:10034/",
-    # "http://58.213.121.2:10035/",
-    # "http://58.213.121.2:10036/",
-    # "http://58.213.121.2:10037/",
-]
-
-
 class Analyzer(threading.Thread):
-    def __init__(self, zmq_end, mid, sender, receiver, servers):
+    def __init__(self, zmq_end, mid, sender, receiver, servers, env):
         super().__init__()
         self.zmq_end = zmq_end
         self.servers = servers
         self.mid = mid
         self.sender = sender
         self.receiver = receiver
+        self.env = env
 
     def run(self):
+        with open("fake_proof.jpg", "rb") as f:
+            img = f.read()
+            body = FULL.to_bytes(1, "little") + img
+            msg = Message(message_id(self.mid, self.sender), self.sender, self.receiver, MessageType.Text, body)
+            send(self.zmq_end, msg.to_bytes())
+        return
         log_data = dict()
         for server in self.servers:
             log_text = ""
@@ -200,7 +190,7 @@ def analyze_quality(log_data):
     good = 0
     for msg_id in log_data:
         logs = log_data[msg_id]
-        if len(logs) != 14:
+        if len(logs) != 10 and len(logs) != 8:
             continue
         total += 1
         time1 = logs[13].time - logs[0].time

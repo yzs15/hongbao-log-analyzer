@@ -8,7 +8,8 @@ from src.analyzer import Analyzer
 
 WS_END = ""
 ZMQ_END = ""
-LOG_SERVERS=""
+LOG_SERVERS = ""
+ENV = ""
 
 async def serve():
     uri = "ws://{}/?mac=02:42:ac:14:00:01&expid=3".format(WS_END)
@@ -36,13 +37,13 @@ async def serve():
                 continue
             print(str(msg.body()))
 
-            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender(), LOG_SERVERS)
+            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender(), LOG_SERVERS, ENV)
             analyzer.start()
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("usage main.py CONFIG_FILE")
+        print("please use config to run")
     else:
         with open(sys.argv[1], "r") as f:
             text = f.read()
@@ -50,5 +51,6 @@ if __name__ == "__main__":
             WS_END = conf["msws"]
             ZMQ_END = conf["mszmq"]
             LOG_SERVERS = conf["loggers"]
+            ENV = conf["env"]
             print(WS_END, ZMQ_END, LOG_SERVERS)
         asyncio.run(serve())
