@@ -6,6 +6,7 @@ import threading
 
 FULL = (1 << 8) - 1
 
+
 class Analyzer(threading.Thread):
     def __init__(self, zmq_end, mid, sender, receiver, servers, env):
         super().__init__()
@@ -17,12 +18,6 @@ class Analyzer(threading.Thread):
         self.env = env
 
     def run(self):
-        with open("fake_proof.jpg", "rb") as f:
-            img = f.read()
-            body = FULL.to_bytes(1, "little") + img
-            msg = Message(message_id(self.mid, self.sender), self.sender, self.receiver, MessageType.Text, body)
-            send(self.zmq_end, msg.to_bytes())
-        return
         log_data = dict()
         for server in self.servers:
             log_text = ""

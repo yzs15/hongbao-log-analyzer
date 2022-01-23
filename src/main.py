@@ -11,6 +11,7 @@ ZMQ_END = ""
 LOG_SERVERS = ""
 ENV = ""
 
+
 async def serve():
     uri = "ws://{}/?mac=02:42:ac:14:00:01&expid=3".format(WS_END)
     async with websockets.connect(uri) as websocket:
