@@ -2,6 +2,7 @@ import sys
 import json
 import asyncio
 import websockets
+from time import time
 
 from src.message import Message, MessageType
 from src.analyzer import Analyzer
@@ -24,6 +25,7 @@ async def serve():
         my_id = msg.receiver()
         print("your id is {}".format(my_id))
 
+        last_time = time() * 1e9
         mid = 1
         while True:
             # 接收开始进行分析的通知
@@ -36,10 +38,12 @@ async def serve():
             if msg.receiver() != my_id:
                 print("receive a broadcast message")
                 continue
-            print(str(msg.body()))
+            print(msg.body().decode("utf-8"))
 
-            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender(), LOG_SERVERS, ENV)
-            analyzer.start()
+            # last_time = time() * 1e9
+            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender(), LOG_SERVERS, ENV, last_time)
+            last_time = analyzer.run()
+            print("last time: ", last_time)
 
 
 if __name__ == "__main__":
