@@ -25,7 +25,8 @@ class Analyzer:
 
     def run(self):
         now = datetime.now()
-        prefix = "logs/{0:04d}{1:02d}{2:02d}{3:02d}{4:02d}".format(now.year, now.month, now.day, now.hour, now.minute)
+        prefix = "logs/{0:04d}{1:02d}{2:02d}{3:02d}{4:02d}{5:02d}".format(
+            now.year, now.month, now.day, now.hour, now.minute, now.second)
         print("Prefix: ", prefix)
         os.makedirs(prefix, exist_ok=True)
 
@@ -135,7 +136,7 @@ addr_name = {
     "tcp://159.226.41.229:8081": "BJ-MsgSevr",
     "tcp://101.43.150.136:8081": "BJ-MsgSevr",
     "tcp://58.240.113.38:10021": "NJ-MsgSevr",
-    "tcp://10.208.104.3:7060" : "BJ-Machn-0",
+    "tcp://10.208.104.3:7060": "BJ-Machn-0",
     "tcp://10.208.104.9:7062": "BJ-Machn-1",
     "tcp://192.168.143.1:5563": "NJ-Machn-0",
     "tcp://192.168.143.2:5563": "NJ-Machn-1",
@@ -169,6 +170,7 @@ def init_addr_name():
         key_nj = "0.{}.2".format(i)
         val_nj = "ThingN{0:04d}".format(i)
         addr_name[key_nj] = val_nj
+
 
 def addr2name(addr, log_file):
     if addr in addr_name:
@@ -263,6 +265,8 @@ def print_logs(prefix, log_data_sorted):
 
 # ------------------------------------------------------------
 
+TOTAL = 25600
+
 def analyze_quality_spb(log_data_sorted, proof):
     total = 0
     under_100 = 0
@@ -285,14 +289,20 @@ def analyze_quality_spb(log_data_sorted, proof):
             under_50 += 1
         if duration < 20000000:
             under_20 += 1
+    print("Number: ", total)
+    total = TOTAL
     proof.num_tasks = total
     proof.yield_100 = under_100 / total
     proof.yield_50 = under_50 / total
     proof.yield_20 = under_20 / total
-    total_time = (last_time - first_time) // 1000000000
+    total_time = (last_time - first_time) * 1. / 1000000000
     proof.goodput_100 = under_100 / total_time
     proof.goodput_50 = under_50 / total_time
     proof.goodput_20 = under_20 / total_time
+
+
+NET_LEN_1 = 8
+NET_LEN_2 = 6
 
 
 def analyze_quality_net(log_data_sorted, proof):
@@ -308,23 +318,25 @@ def analyze_quality_net(log_data_sorted, proof):
         if thing_id < 3:
             continue
         ll = len(logs)
-        if not (ll == 10 or ll == 8):
+        if not (ll == NET_LEN_1 or ll == NET_LEN_2) or (log_data_item[0] & (1 << 40 - 1)) == ((1 << 20) | 2):
             continue
         if first_time == 0:
             first_time = logs[0].time
         total += 1
-        if ll == 10:
-            duration = logs[7].time - logs[2].time
-            last_time = logs[9].time
+        if ll == NET_LEN_1:
+            duration = logs[NET_LEN_1 - 2].time - logs[2].time
+            last_time = logs[NET_LEN_1 - 1].time
         else:
-            duration = logs[5].time - logs[2].time
-            last_time = logs[7].time
+            duration = logs[NET_LEN_2 - 2].time - logs[2].time
+            last_time = logs[NET_LEN_2 - 1].time
         if duration < 100000000:
             under_100 += 1
         if duration < 50000000:
             under_50 += 1
         if duration < 20000000:
             under_20 += 1
+    print("Number: ", total)
+    total = TOTAL
     proof.num_tasks = total
     proof.yield_100 = under_100 / total
     proof.yield_50 = under_50 / total
