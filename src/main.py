@@ -41,7 +41,7 @@ async def serve():
             print(msg.body().decode("utf-8"))
 
             # last_time = time() * 1e9
-            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender(), LOG_SERVERS, ENV, last_time)
+            analyzer = Analyzer(ZMQ_END, mid, my_id, msg.sender(), LOG_SERVERS, ENV, 0)
             last_time = analyzer.run()
             print("last time: ", last_time)
 

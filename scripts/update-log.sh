@@ -13,7 +13,7 @@ SESSION_NAME=logana
 PRO_DIR='$HOME/projects/hongbao-log'
 
 ssh $SERVER "mkdir -p $PRO_DIR"
-rsync -aP ./* $SERVER:$PRO_DIR/ --exclude-from=.gitignore
+rsync -a ./* $SERVER:$PRO_DIR/ --exclude-from=.gitignore
 
 ssh $SERVER "
 tmux send-keys -t $SESSION_NAME:0.0 C-c C-m ;

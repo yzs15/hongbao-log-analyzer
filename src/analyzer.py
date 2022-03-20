@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import os
 
 FULL = (1 << 8) - 1
+TOTAL = 170624
 
 
 class Analyzer:
@@ -25,13 +26,12 @@ class Analyzer:
 
     def run(self):
         now = datetime.now()
-        prefix = "logs/{0:04d}{1:02d}{2:02d}{3:02d}{4:02d}{5:02d}".format(
-            now.year, now.month, now.day, now.hour, now.minute, now.second)
+        prefix = "logs/{0:04d}{1:02d}{2:02d}{3:02d}{4:02d}{5:02d}-{6}-{7:d}".format(
+            now.year, now.month, now.day, now.hour, now.minute, now.second, self.env, TOTAL)
         print("Prefix: ", prefix)
         os.makedirs(prefix, exist_ok=True)
 
         log_data = dict()
-        log_data_sorted = []
         for server in self.servers:
             log_text = ""
             print("start request log: ", server)
@@ -47,15 +47,19 @@ class Analyzer:
                 logs.append(sp)
             add_logs(server, logs, log_data, self.last_time)
         log_data_sorted = sort_logs(log_data)
-        print_logs(prefix, log_data_sorted)
+
+        print_logs(prefix, "log.txt", log_data_sorted)
         proof = proof_data()
         proof.timestamp = datetime.now() + timedelta(hours=8)
+
         if self.env == "net":
             analyze_quality_net(log_data_sorted, proof)
+            save_proof_csv(prefix, proof, "src/net_base.png")
             draw_proof(prefix, proof, "src/net_base.png")
         elif self.env == "spb":
             analyze_quality_spb(log_data_sorted, proof)
             analyze_path(log_data_sorted, proof)
+            save_proof_csv(prefix, proof, "src/spb_base.png")
             draw_proof(prefix, proof, "src/spb_base.png")
         else:
             print("UNKNOWN env:", self.env)
@@ -68,9 +72,110 @@ class Analyzer:
             img = f.read()
             body = FULL.to_bytes(1, "little") + img
             msg = Message(message_id(self.mid, self.sender), self.sender, self.receiver, MessageType.Text, body)
-            send(self.zmq_end, msg.to_bytes())
+            # send(self.zmq_end, msg.to_bytes())
 
         return log_data_sorted[-1][1][-1].time
+
+    def run_local(self, dir):
+        global TOTAL
+        # TOTAL = int(dir.split("-")[-1])
+        TOTAL = 170624
+
+        log_data_sorted = load_logs_from_dir(dir, self.last_time)
+
+        proof = proof_data()
+        proof.timestamp = log_data_sorted[0][1][0].time
+
+        # 统计保质任务情况
+        # valid_logs = list_valid_logs_spb(log_data_sorted)
+        # list_good_task_spb(valid_logs)
+
+        # 获取MsgSvr发出的时间
+        # bj_send_times = []
+        # nj_send_times = []
+        # valid_logs = list_valid_logs_spb(log_data_sorted)
+        # for log_item in valid_logs:
+        #     logs = log_item[1]
+        #     for i in range(len(logs)):
+        #         log = logs[i]
+        #         if log.logger == 'BJ-MsgSevr':
+        #             bj_send_times.append(logs[i+1].time)
+        #             break
+        #         elif log.logger == 'NJ-MsgSevr':
+        #             nj_send_times.append(logs[i+1].time)
+        #             break
+
+        # with open("./nj_time.csv", "w") as f:
+        #     f.write(str(nj_send_times))
+        # with open("./bj_time.csv", "w") as f:
+        #     f.write(str(bj_send_times))
+
+        # 统计machine的时间
+        machines = ["NJ-Machn-0", "NJ-Machn-1", "BJ-Machn-0", "BJ-Machn-1"]
+        valid_logs = list_valid_logs_spb(log_data_sorted)
+        time_sum = {}
+        for log_item in valid_logs:
+            logs = log_item[1]
+            for i in range(len(logs)):
+                log = logs[i]
+                duration = logs[i + 2].time - logs[i + 1].time
+                start_time = logs[i+1].time
+                end_time = logs[i+2].time
+                if log.logger in machines:
+                    if log.logger not in time_sum:
+                        time_sum[log.logger] = []
+                    time_sum[log.logger].append("{},{},{}".format(duration, start_time, end_time))
+                    break
+
+        for machine in machines:
+            with open(machine + '.csv', "w") as f:
+                f.write('\n'.join(time_sum[machine]))
+
+        # 重新计算通量
+        # if self.env == "net":
+        #     analyze_quality_net(log_data_sorted, proof)
+            # add_proof_csv("result.csv", "net", proof)
+        # elif self.env == "spb":
+        #     analyze_quality_spb(log_data_sorted, proof)
+        #     analyze_path(log_data_sorted, proof)
+        #     add_proof_csv("result.csv", "spb", proof)
+
+        # 分析大于50ms的原因
+        # if self.env == "net":
+        #     valid_logs = list_valid_logs_net(log_data_sorted)
+        # elif self.env == "spb":
+        #     valid_logs = list_valid_logs_spb(log_data_sorted)
+        #     gt_50_logs = [log_item for log_item in valid_logs if 50000000 <= log_duration_spb(log_item)]
+        #     print_logs(dir, "gt_50_logs.txt", gt_50_logs)
+        #
+        #     total = 0
+        #     for log_item in gt_50_logs:
+        #         total += log_duration_spb(log_item)
+        #     print("Average duration: ", total / len(gt_50_logs))
+        #
+        #     gap_big = {}
+        #     for log_item in gt_50_logs:
+        #         logs = log_item[1]
+        #         biggest_gap = 0
+        #         biggest_idx = 0
+        #         for i in range(len(logs)-1):
+        #             if biggest_gap < logs[i+1].time - logs[i].time:
+        #                 biggest_gap = logs[i+1].time - logs[i].time
+        #                 biggest_idx = i
+        #         if biggest_idx in gap_big:
+        #             gap_big[biggest_idx] += 1
+        #         else:
+        #             gap_big[biggest_idx] = 1
+        #     print(len(gt_50_logs), gap_big)
+        # else:
+        #     print("UNKNOWN env:", self.env)
+
+        # proof.print_proof()
+        if len(unknown_names) != 0:
+            print(unknown_names)
+
+        return log_data_sorted[-1][1][-1].time
+
 
 
 class event_log:
@@ -93,6 +198,7 @@ class event_log:
 
 class proof_data:
     def __init__(self):
+        self.real_nums = 0
         self.timestamp = 0
         self.num_tasks = 0
         self.yield_100 = 0
@@ -224,7 +330,7 @@ def fetch_logs(filename):
 def add_logs(log_file, logs, log_data, last_time):
     for log in logs:
         items = log.split(",")
-        if int(items[3]) < last_time:
+        if len(items) < 4 or int(items[3]) < last_time:
             continue
 
         log_item = event_log()
@@ -244,6 +350,28 @@ def add_logs(log_file, logs, log_data, last_time):
             log_data[msg_id] = [log_item]
 
 
+def load_logs_from_dir(dir, last_time):
+    log_data = dict()
+    filenames = os.listdir(dir)
+    for filename in filenames:
+        name, ext = os.path.splitext(filename)
+        if name.find("log") != -1 or ext != ".txt":
+            continue
+
+        log_text = ""
+        with open(os.path.join(dir, filename), "r") as f:
+            log_text += f.read().strip() + '\n'
+        log_splits = log_text.split("\n")
+
+        logs = []
+        for sp in log_splits:
+            if len(sp) == 0:
+                continue
+            logs.append(sp)
+        add_logs("server", logs, log_data, last_time)
+    return sort_logs(log_data)
+
+
 def sort_logs(log_data):
     for msg_id in log_data:
         log_data[msg_id].sort(key=lambda x: x.time)
@@ -252,8 +380,13 @@ def sort_logs(log_data):
     return log_list
 
 
-def print_logs(prefix, log_data_sorted):
-    f = open(prefix + "/log.txt", "w", encoding="utf-8")
+def filter_logs(log_data, filter):
+    filtered = [log for log in log_data if filter(log)]
+    return filtered
+
+
+def print_logs(prefix, filename, log_data_sorted):
+    f = open(prefix + "/" + filename, "w", encoding="utf-8")
     for logs in log_data_sorted:
         print("Message ID " + msg_id_int2dot(logs[0]) + " (" + str(logs[0]) + ")" + " #Record=" + str(len(logs[1])),
               file=f)
@@ -265,7 +398,69 @@ def print_logs(prefix, log_data_sorted):
 
 # ------------------------------------------------------------
 
-TOTAL = 25600
+SPB_LEN = 14
+SPB_START_IDX = 2
+SPB_END_IDX = SPB_LEN - 3
+
+
+def log_duration_spb(log_data_item):
+    logs = log_data_item[1]
+    duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
+    return duration
+
+
+def list_valid_logs_spb(log_data_sorted):
+    valid_logs = []
+    for log_data_item in log_data_sorted:
+        logs = log_data_item[1]
+        if len(logs) != SPB_LEN:
+            continue
+        valid_logs.append(log_data_item)
+    return valid_logs
+
+
+def list_good_task_spb(log_data_sorted):
+    under_100 = 0
+    under_50 = 0
+    under_20 = 0
+    pos_1_100 = 0
+    pos_2_100 = 0
+    pos_1_all = 0
+    pos_2_all = 0
+    good_put_dis = {}
+    for log_data_item in log_data_sorted:
+        msg_id = log_data_item[0] >> 40
+        dev_id = (log_data_item[0] >> 20) & ((1<<20)-1)
+        pos_id = (log_data_item[0]) & ((1<<20)-1)
+
+        logs = log_data_item[1]
+        duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
+
+        if duration < 100000000:
+            under_100 += 1
+            print(msg_id, dev_id, pos_id)
+            prefix = msg_id // 100
+            if prefix not in good_put_dis:
+                good_put_dis[prefix] = 0
+            good_put_dis[prefix] += 1
+            if pos_id == 1:
+                pos_1_100 += 1
+            if pos_id == 2:
+                pos_2_100 += 1
+        if duration < 50000000:
+            under_50 += 1
+        if duration < 20000000:
+            under_20 += 1
+        if pos_id == 1:
+            pos_1_all += 1
+        if pos_id == 2:
+            pos_2_all += 1
+
+    for k in good_put_dis:
+        print(k, good_put_dis[k])
+    print(under_100, under_50, under_20)
+    print("100ms", pos_1_100, pos_2_100)
+    print("total", pos_1_all, pos_2_all)
 
 def analyze_quality_spb(log_data_sorted, proof):
     total = 0
@@ -276,13 +471,15 @@ def analyze_quality_spb(log_data_sorted, proof):
     last_time = 0
     for log_data_item in log_data_sorted:
         logs = log_data_item[1]
-        if len(logs) != 14:
+        if len(logs) != SPB_LEN:
             continue
-        if first_time == 0:
-            first_time = logs[0].time
         total += 1
-        duration = logs[11].time - logs[2].time
-        last_time = logs[13].time
+        if first_time == 0:
+            first_time = logs[SPB_START_IDX].time
+        elif logs[SPB_START_IDX].time < first_time:
+            first_time = logs[SPB_START_IDX].time
+        duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
+        last_time = logs[SPB_END_IDX].time
         if duration < 100000000:
             under_100 += 1
         if duration < 50000000:
@@ -290,6 +487,7 @@ def analyze_quality_spb(log_data_sorted, proof):
         if duration < 20000000:
             under_20 += 1
     print("Number: ", total)
+    proof.real_nums = total
     total = TOTAL
     proof.num_tasks = total
     proof.yield_100 = under_100 / total
@@ -303,6 +501,73 @@ def analyze_quality_spb(log_data_sorted, proof):
 
 NET_LEN_1 = 8
 NET_LEN_2 = 6
+NET_START_IDX = 2
+NET_END_IDX_1 = NET_LEN_1 - 3
+NET_END_IDX_2 = NET_LEN_2 - 3
+
+
+def list_valid_logs_net(log_data_sorted):
+    valid_logs = []
+    for log_data_item in log_data_sorted:
+        msg_id = log_data_item[0] >> 40
+        if msg_id >> 19 == 1:  # 干扰消息
+            continue
+        logs = log_data_item[1]
+        if msg_id < 3:
+            continue
+        ll = len(logs)
+        if not (ll == NET_LEN_1 or ll == NET_LEN_2) or (log_data_item[0] & (1 << 40 - 1)) == ((1 << 20) | 2):
+            continue
+        valid_logs.append(log_data_item)
+    return valid_logs
+
+
+def list_good_task_net(log_data_sorted):
+    under_100 = 0
+    under_50 = 0
+    under_20 = 0
+    pos_1_100 = 0
+    pos_2_100 = 0
+    pos_1_all = 0
+    pos_2_all = 0
+    good_put_dis = {}
+    for log_data_item in log_data_sorted:
+        msg_id = log_data_item[0] >> 40
+        dev_id = (log_data_item[0] >> 20) & ((1<<20)-1)
+        pos_id = (log_data_item[0]) & ((1<<20)-1)
+
+        logs = log_data_item[1]
+        ll = len(logs)
+        if ll == NET_LEN_1:
+            duration = logs[NET_END_IDX_1].time - logs[NET_START_IDX].time
+        else:
+            duration = logs[NET_END_IDX_2].time - logs[NET_START_IDX].time
+
+        if duration < 100000000:
+            under_100 += 1
+            print(msg_id, dev_id, pos_id)
+            prefix = msg_id // 100
+            if prefix not in good_put_dis:
+                good_put_dis[prefix] = 0
+            good_put_dis[prefix] += 1
+            if pos_id == 1:
+                pos_1_100 += 1
+            if pos_id == 2:
+                pos_2_100 += 1
+        if duration < 50000000:
+            under_50 += 1
+        if duration < 20000000:
+            under_20 += 1
+        if pos_id == 1:
+            pos_1_all += 1
+        if pos_id == 2:
+            pos_2_all += 1
+
+    for k in good_put_dis:
+        print(k, good_put_dis[k])
+    print(under_100, under_50, under_20)
+    print("100ms", pos_1_100, pos_2_100)
+    print("total", pos_1_all, pos_2_all)
 
 
 def analyze_quality_net(log_data_sorted, proof):
@@ -312,23 +577,22 @@ def analyze_quality_net(log_data_sorted, proof):
     under_20 = 0
     first_time = 0
     last_time = 0
-    for log_data_item in log_data_sorted:
-        thing_id = log_data_item[0] >> 40
+
+    valid_logs = list_valid_logs_net(log_data_sorted)
+    for log_data_item in valid_logs:
         logs = log_data_item[1]
-        if thing_id < 3:
-            continue
         ll = len(logs)
-        if not (ll == NET_LEN_1 or ll == NET_LEN_2) or (log_data_item[0] & (1 << 40 - 1)) == ((1 << 20) | 2):
-            continue
         if first_time == 0:
-            first_time = logs[0].time
+            first_time = logs[SPB_START_IDX].time
+        elif logs[SPB_START_IDX].time < first_time:
+            first_time = logs[SPB_START_IDX].time
         total += 1
         if ll == NET_LEN_1:
-            duration = logs[NET_LEN_1 - 2].time - logs[2].time
-            last_time = logs[NET_LEN_1 - 1].time
+            duration = logs[NET_END_IDX_1].time - logs[NET_START_IDX].time
+            last_time = logs[NET_END_IDX_1].time
         else:
-            duration = logs[NET_LEN_2 - 2].time - logs[2].time
-            last_time = logs[NET_LEN_2 - 1].time
+            duration = logs[NET_END_IDX_2].time - logs[NET_START_IDX].time
+            last_time = logs[NET_END_IDX_2].time
         if duration < 100000000:
             under_100 += 1
         if duration < 50000000:
@@ -336,6 +600,7 @@ def analyze_quality_net(log_data_sorted, proof):
         if duration < 20000000:
             under_20 += 1
     print("Number: ", total)
+    proof.real_nums = total
     total = TOTAL
     proof.num_tasks = total
     proof.yield_100 = under_100 / total
@@ -390,6 +655,27 @@ def analyze_path(log_data_sorted, proof):
 
 
 from PIL import Image, ImageFont, ImageDraw
+
+
+def add_proof_csv(filename, env, proof):
+    res_str = "{},{},{},{},{},{},{},{},{},{}\n".format(
+        env, str(proof.timestamp), str(proof.num_tasks), str(proof.real_nums),
+        proof.yield_100 * 100, proof.yield_50 * 100, proof.yield_20 * 100,
+        proof.goodput_100, proof.goodput_50, proof.goodput_20)
+    with open(filename, "a") as f:
+        f.write(res_str)
+
+
+def save_proof_csv(prefix, proof, base):
+    env = base.replace("src/", "").replace("_base.png", "")
+    res_str = "{},{},{},{},{},{},{},{},{},{}\n".format(
+        env, str(proof.timestamp), str(proof.num_tasks), str(proof.real_nums),
+        proof.yield_100 * 100, proof.yield_50 * 100, proof.yield_20 * 100,
+        proof.goodput_100, proof.goodput_50, proof.goodput_20)
+    with open("{}/result.csv".format(prefix), "w") as f:
+        f.write(res_str)
+    with open("{}/../result.csv".format(prefix), "a") as f:
+        f.write(res_str)
 
 
 def draw_proof(prefix, proof, base):
