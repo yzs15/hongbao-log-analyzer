@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import os
 
 FULL = (1 << 8) - 1
-TOTAL = 7680
+TOTAL = 256000
 
 
 class Analyzer:
@@ -26,6 +26,8 @@ class Analyzer:
         init_addr_name()
     def fake_run(self, prefix):
         print("fake_run")
+        global TOTAL
+        TOTAL = int(prefix.split("-")[-1])
         files = os.listdir(prefix)
         log_data = dict()
         for file in files:

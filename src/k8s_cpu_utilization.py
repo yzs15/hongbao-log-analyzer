@@ -21,12 +21,39 @@ def cal_pos_cpu(path, noise):
             rows.append(line.split(','))
 
         pod_data = []
-        cur_beg = (int(rows[0][1]) // 1000000) % 1000000
-        cur_time = cur_beg
+        # cur_beg = (int(rows[0][1]) // 1000000) % 1000000
+        # cur_time = cur_beg
+        def takeFirst(elem):
+            return int(elem[1])
+        rows.sort(key=takeFirst)
+        #删除相同时间的
+        rows_tmp = [rows[0]]
+        for i in range(1, len(rows) - 1):
+            if round((int(rows[i][1]) / 1000000))  == round((int(rows[i - 1][1]) / 1000000)) :
+                continue
+            else:
+                rows_tmp.append(rows[i])
+        rows = rows_tmp
+        #删除由于时间戳和文件读取不同步导致的负数的情况，注意上述问题会导致记录不是ms级精准的，看log应该是10ms级精准
+        rows_tmp = [rows[0]]
+        for i in range(1, len(rows) - 1):
+            if int(rows[i][2]) - int(rows_tmp[-1][2]) < 0:
+                continue
+            else:
+                rows_tmp.append(rows[i])
+        rows = rows_tmp
+        last_time =  round((int(rows[0][1]) / 1000000))
         for i in range(0, len(rows) - 1):
+            cur_time = round((int(rows[i][1]) / 1000000))
             cpu_time = (int(rows[i + 1][2]) - int(rows[i][2])) * 1. / 1000000
-            pod_data.append([cur_time, cpu_time, 1])
-            cur_time += 1
+            if cpu_time < 0:
+                print(path, file, rows[i][1], cpu_time, int(rows[i+1][1]) - int(rows[i][1]))
+            else:
+                for i in range(last_time + 1, cur_time):
+                    pod_data.append([i, 0, 1])
+                pod_data.append([cur_time, cpu_time, 1])
+                last_time = cur_time
+
 
         if len(pod_data) == 0:
             continue
@@ -53,14 +80,16 @@ def combine_data(data1, data2):
     data2[len(data2) - 1][0]
 
     total_data = [[i, 0, 0] for i in range(beg_time, end_time + 1)]
-    for row in data1:
-        time = row[0]
-        cpu_time = row[1]
-        pod_num = row[2]
-        idx = time - beg_time
-        total_data[idx][1] += cpu_time
-        total_data[idx][2] += pod_num
-
+    try:
+        for row in data1:
+            time = row[0]
+            cpu_time = row[1]
+            pod_num = row[2]
+            idx = time - beg_time
+            total_data[idx][1] += cpu_time
+            total_data[idx][2] += pod_num
+    except Exception as err:
+        print(idx, beg_time, end_time)
     for row in data2:
         time = row[0]
         cpu_time = row[1]
@@ -121,7 +150,7 @@ def get_first_time(dirpath):
         if logs[0].time < first_time_full:
             first_time_full = logs[0].time
 
-    return (first_time_full // 1000000) % 1000000
+    return (first_time_full // 1000000)
 
 
 def list_total_cpu(dirpath, noise):

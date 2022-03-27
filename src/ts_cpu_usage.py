@@ -23,7 +23,7 @@ def analyze(path):
         file_path = os.path.join(path, file)
         f = open(file_path)
         lines = f.readlines()
-        max_core = 0
+        
         for line in lines:
             log = line.split(",")
             if len(log) < 4 or log[0] == '':
@@ -61,6 +61,7 @@ def analyze(path):
         f.close()
 
     # print(os.path.basename(path))
+    max_core = 0
     f = open(os.path.join(os.path.dirname(path), os.path.basename(path) + "_analyze.csv"), "w")
     for i in log_times:
         if log_times[i] > max_core:
