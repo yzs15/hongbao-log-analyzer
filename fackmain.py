@@ -5,7 +5,7 @@ import websockets
 from time import time
 
 from src.message import Message, MessageType
-from src.analyzer_local import Analyzer
+from src.analyzer import Analyzer
 
 WS_END = ""
 ZMQ_END = ""
@@ -18,6 +18,22 @@ def serve():
     last_time = analyzer.fake_run(prefix=PREFIX)
     print("last time: ", last_time)
 
+def start(conf_path, prefix):
+    global WS_END,ZMQ_END,LOG_SERVERS,ENV,PREFIX
+    with open(conf_path, "r") as f:
+        text = f.read()
+        conf = json.loads(text)
+        WS_END = conf["msws"]
+        ZMQ_END = conf["mszmq"]
+        LOG_SERVERS = conf["loggers"]
+        ENV = conf["env"]
+        PREFIX = prefix
+    try:
+        serve()
+    except Exception as err:
+        f = open("log", "a")
+        f.write(prefix+"\n")
+        f.close()
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
