@@ -60,6 +60,8 @@ def analyze(machine_task_duration, time_interval):
     log_times_total = {}
     log_times_total_detail = {}
     for idx, machine in enumerate(machines):
+        if not machine_task_duration.__contains__(machine):
+            continue
         log_times = cal_cpu_alloc(machine_task_duration[machine], time_interval)
         for i in log_times:
             if log_times_total.__contains__(i):

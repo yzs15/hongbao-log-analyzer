@@ -243,11 +243,12 @@ def analyze(dirpath, noise):
     summary2 = cal_summary(filtered_data)
 
     # total 100ms
-    print("cal k8s cpu alloc 100ms ......")
-    compressed_data = compress_final_data(total_date, 100)
+    resolution = 300
+    print("cal k8s cpu alloc %dms ......"%resolution)
+    compressed_data = compress_final_data(total_date, resolution)
     filtered_data = filter_data(compressed_data,
-                                lambda log: first_time // 100 <= log[0] < (first_time + 200000) // 100)
-    write_file(filtered_data, dirpath + "/../k8s_{}_cpu_100ms.csv".format(flag))
+                                lambda log: first_time // resolution <= log[0] < (first_time + 200000) // resolution)
+    write_file(filtered_data, dirpath + f"/../k8s_{flag}_cpu_{resolution}ms.csv")
     summary3 = cal_summary(filtered_data)
 
     summary_file = open(dirpath + "/../k8s_{}_cpu_summary.csv".format(flag), "w")

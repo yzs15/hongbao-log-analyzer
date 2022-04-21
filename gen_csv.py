@@ -8,7 +8,7 @@ spb_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-spb.js
 #{ratio:{peak:{type:[]}}}
 data = {}
 
-def record(task_num, peak , ratio , type, file_path):
+def record(task_num, peak , ratio , type, file_path, utility):
     try:
         f = open(file_path)
         line = f.readlines()[0]
@@ -27,10 +27,28 @@ def record(task_num, peak , ratio , type, file_path):
             data[ratio][peak] = {}
         if not data[ratio][peak].__contains__(type):
             data[ratio][peak][type] = []
-        data[ratio][peak][type].append(line_li[-7:])
+        data[ratio][peak][type].append(line_li[-7:]+[utility])
     except Exception as err:
         print(err)
+def load_util(parent):
+    alloc_path = os.path.join(parent, "ts_cpu_alloc_100ms.csv")
+    uasge_path = os.path.join(parent, "ts_cpu_usage_100ms.csv")
+    def load_cpu_use(file_path):
+        f = open(file_path)
+        use = 0
+        lines = f.readlines()
+        
 
+        for line in lines:
+            line = line.replace("\n", "")
+            if line[-1] == ",":
+                line = line[0:-1]
+            datas = line.split(",")
+            use += float(datas[-1])
+        return use
+    alloc = load_cpu_use(alloc_path)
+    uasge = load_cpu_use(uasge_path)
+    return str(uasge / alloc)
 def gen_csv_one(parent):
     is_net = False
     is_spb = False
@@ -44,6 +62,8 @@ def gen_csv_one(parent):
         return 0
     print("net", is_net, "spb", is_spb)
     if is_net:  
+        utility = "0"
+
         base = os.path.basename(parent)
         # print(base)
         base_list = base.split("-")
@@ -58,9 +78,10 @@ def gen_csv_one(parent):
                 continue
             log_path = os.path.join(parent,file)
             file_path = os.path.join(log_path, "result.csv")
-            record(task_num, peak, ratio, type, file_path)
+            record(task_num, peak, ratio, type, file_path, utility)
     
     if is_spb:  
+        
         base = os.path.basename(parent)
         print(base)
         base_list = base.split("-")
@@ -74,8 +95,12 @@ def gen_csv_one(parent):
             if  not "spb" in file:
                 continue
             log_path = os.path.join(parent,file)
+            try:
+                utility = load_util(parent)
+            except:
+                utility = "0"
             file_path = os.path.join(log_path, "result.csv")
-            record(task_num, peak, ratio, type, file_path)
+            record(task_num, peak, ratio, type, file_path, utility)
             
     
     return 0
@@ -93,7 +118,7 @@ if __name__=="__main__":
     for parent in parents:
         gen_csv_one(parent)
     import pprint
-    pprint.pprint(data["1"])
+    # pprint.pprint(data["1"])
     f = open(os.path.join(grandParent,"final.csv"), "w")
     for ration in data:
         f.write(ration+"\n")
@@ -105,11 +130,30 @@ if __name__=="__main__":
             f.write("%s"%peak)
             for type in ["10mC20C60%", "1C2C60%", "4C8C10%", "spb"]:
                 if data[ration][peak].__contains__(type):
-                    res =  data[ration][peak][type][-1]
+                    max_util = 0
+                    min_util = 1000
+                    average_util = 0
+                    num = 0
+                    for info in  data[ration][peak][type]:
+                        res = info
+                        max_util = max(max_util, float(res[-1]))
+                        min_util = min(min_util, float(res[-1]))
+                        average_util +=  float(res[-1])
+                        num+= 1
+                    print(res)
+                    qos_yield = float(res[1])*0.5 + float(res[2])*13/32 + float(res[3])*3/32
+                    qos_goodput = float(res[4]) + float(res[5]) + float(res[6])
+                    res = [res[0]]
+                    res.append(str(qos_yield))
+                    res.append(str(qos_goodput))
+                    res.append(str(average_util / num))
+                    res.append(str(max_util))
+                    res.append(str(min_util))
                     f.write(",")
                     f.write(",".join(res))
                 else:
-                    f.write(",?,?,?,?,?,?")
+                    f.write(",?,?,? ,?,?,?")
+                    # f.write(",? ,?,?,? ,?,?,? ,?,?,?,?,?")
             f.write("\n")
         f.write("\n\n") 
 

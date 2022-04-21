@@ -18,6 +18,12 @@ def serve():
     last_time = analyzer.fake_run(prefix=PREFIX)
     print("last time: ", last_time)
 
+def task_character_ana():
+    analyzer = Analyzer(ZMQ_END,  1  , 2,3, LOG_SERVERS, ENV, 0)
+    last_time = analyzer.task_character_ana(prefix=PREFIX)
+    print("last time: ", last_time)
+
+
 def start(conf_path, prefix):
     global WS_END,ZMQ_END,LOG_SERVERS,ENV,PREFIX
     with open(conf_path, "r") as f:
@@ -30,6 +36,23 @@ def start(conf_path, prefix):
         PREFIX = prefix
     try:
         serve()
+    except Exception as err:
+        f = open("log", "a")
+        f.write(prefix+"\n")
+        f.close()
+
+def task_character(conf_path, prefix):
+    global WS_END,ZMQ_END,LOG_SERVERS,ENV,PREFIX
+    with open(conf_path, "r") as f:
+        text = f.read()
+        conf = json.loads(text)
+        WS_END = conf["msws"]
+        ZMQ_END = conf["mszmq"]
+        LOG_SERVERS = conf["loggers"]
+        ENV = conf["env"]
+        PREFIX = prefix
+    try:
+        task_character_ana()
     except Exception as err:
         f = open("log", "a")
         f.write(prefix+"\n")
