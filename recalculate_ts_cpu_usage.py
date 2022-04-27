@@ -1,11 +1,13 @@
-import imp
 from multiprocessing import Pool, parent_process
 import sys
 import os
 from fackmain import start
+
 net_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-net.json"
 spb_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-spb.json"
+
 from src.ts_cpu_usage_10 import calculate_cpu_usage
+
 def recalculate_one(parent):
     is_net = False
     is_spb = False
@@ -46,6 +48,7 @@ def recalculate_one(parent):
             print(path)   
 
     return 0
+
 if __name__=="__main__":
     f = open("log", "w")
     f.close()

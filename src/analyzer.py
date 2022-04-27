@@ -1,18 +1,16 @@
-from multiprocessing import Event
-from operator import index, le
+
 from typing import List
-from pandas import read_pickle
+
 import requests
 from src.message import Message, MessageType
 from src.idutils import message_id
-from src.zmqutils import send
 from src.fileutils import save_logs
-import threading
+
 from datetime import datetime, timedelta
 import os
 
 FULL = (1 << 8) - 1
-TOTAL = 100
+TOTAL = 320000
 
 
 class Analyzer:
@@ -43,6 +41,19 @@ class Analyzer:
         log_data_sorted = sort_logs(log_data)
         # print_logs(prefix, "log.txt", log_data_sorted)
         task_character_ana(log_data_sorted, prefix)
+
+    def parse_log(self, log_dirpath):
+        log_data = dict()
+        files = os.listdir(log_dirpath)
+        for file in files:
+            url = "http://"+file.replace("-",":").replace(".txt", "")
+            if not url in self.servers:
+                continue
+            path = os.path.join(log_dirpath, file)
+            logs = open(path).readlines()
+            add_logs(url, logs, log_data, self.last_time)
+        log_data_sorted = sort_logs(log_data)
+        return log_data_sorted
 
     def fake_run(self, prefix):
         global TOTAL
@@ -84,6 +95,7 @@ class Analyzer:
             # send(self.zmq_end, msg.to_bytes())
 
         return log_data_sorted[-1][1][-1].time
+    
     def run(self):
         now = datetime.now()
         prefix = "logs/{0:04d}{1:02d}{2:02d}{3:02d}{4:02d}{5:02d}-{6}-{7:d}".format(
@@ -117,7 +129,7 @@ class Analyzer:
             save_proof_csv(prefix, proof, "src/net_base.png")
             draw_proof(prefix, proof, "src/net_base.png")
         elif self.env == "spb":
-            analyze_quality_spb_v2(log_data_sorted, proof, prefix)
+            analyze_quality_spb_v2_all(log_data_sorted, proof, prefix)
             analyze_path(log_data_sorted, proof)
             save_proof_csv(prefix, proof, "src/spb_base.png")
             draw_proof(prefix, proof, "src/spb_base.png")
@@ -650,6 +662,172 @@ def analyze_quality_spb(log_data_sorted, proof):
     proof.goodput_100 = under_100 / total_time
     proof.goodput_50 = under_50 / total_time
     proof.goodput_20 = under_20 / total_time
+
+def analyze_quality_spb_v2_all(log_data_sorted, proof, prefix):
+    total = 0
+    under_100 = 0
+    under_50 = 0
+    under_20 = 0
+
+    qos_100 = 0
+    qos_50 = 0
+    qos_20 = 0
+    qos_good_100 = 0
+    qos_good_50 = 0
+    qos_good_20 = 0
+    
+    qos_bj_100_good = 0
+    qos_bj_50_good = 0
+    qos_nj_100_good = 0
+    qos_nj_50_good = 0
+    qos_nj_20_good = 0
+    BJ_machine1_50_good = 0
+    BJ_machine2_50_good = 0
+
+    qos_bj_100 = 0
+    qos_bj_50 = 0
+    qos_nj_100 = 0
+    qos_nj_50 = 0
+    qos_nj_20 = 0
+    BJ_machine1_50 = 0
+    BJ_machine2_50 = 0
+    first_time = 0
+    last_time = 0
+    # id_bits = ((1<<22) -1) << 40
+    location_bits = (1<<20) -1
+    # print(log_data_sorted)
+    task_info_detail = []
+    for log_data_item in log_data_sorted:
+        qos = 0
+        is_good = False
+        message_id = (log_data_item[0])>>40
+        # if message_id > 10000:
+        #     print(message_id)
+        if message_id >> 23 == 1:  # 干扰消息
+            # print("hshsh")
+            continue
+        if message_id >> 22 == 1:  # 干扰消息
+            continue
+        if message_id <2:
+            continue
+        location = (log_data_item[0] & location_bits)
+        if location == 1:
+            if message_id % 2 == 0:
+                qos_100 += 1
+            if  message_id % 2 == 1:
+                qos_50 += 1
+        if location == 2:
+            if message_id % 2 == 0:
+                qos_100 += 1
+            if  message_id % 4 == 1:
+                qos_50 += 1
+            if  message_id % 4 == 3:
+                qos_20 += 1
+               
+        logs = log_data_item[1]
+        if len(logs) != SPB_LEN:
+            # print(logs)
+            continue
+        if first_time == 0:
+            first_time = logs[SPB_START_IDX].time
+        total += 1
+        duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
+        last_time = logs[SPB_END_IDX].time
+        if duration < 100000000:
+            under_100 += 1
+        if duration < 50000000:
+            under_50 += 1
+        if duration < 20000000:
+            under_20 += 1
+        is_BJ_machine1 = False
+        is_BJ_machine2 = False
+
+        for i in range(14):
+            if logs[i].logger == "BJ-Machn-0":
+                is_BJ_machine1 = True
+                break
+            elif logs[i].logger == "BJ-Machn-1":
+                is_BJ_machine2 = True
+                break
+           
+        
+        if location == 1:
+            if message_id % 2 == 0:
+                qos=100000000
+                if duration < 100000000:
+                    qos_good_100 += 1
+                    is_good=True
+                    qos_bj_100_good += 1
+                qos_bj_100 += 1
+            if  message_id % 2 == 1:
+                qos=50000000
+                if duration < 50000000:
+                    qos_good_50 += 1
+                    is_good=True
+                    qos_bj_50_good += 1
+                    if is_BJ_machine1:
+                        BJ_machine1_50_good += 1
+                    else:
+                        BJ_machine2_50_good += 1
+                qos_bj_50 += 1
+                if is_BJ_machine1:
+                    BJ_machine1_50 += 1
+                else:
+                    BJ_machine2_50 += 1
+        if location == 2:
+            if message_id % 2 == 0:
+                qos=100000000
+                if duration < 100000000:
+                    qos_good_100 += 1
+                    is_good=True
+                    qos_nj_100_good += 1
+                qos_nj_100 += 1
+            if  message_id % 4 == 1:
+                qos=50000000
+                if duration < 50000000:
+                    qos_good_50 += 1
+                    is_good=True
+                    qos_nj_50_good += 1
+                qos_nj_50 += 1
+            if  message_id % 4 == 3:
+                qos=20000000
+                if duration < 20000000:
+                    qos_good_20 += 1
+                    is_good=True
+                    qos_nj_20_good += 1
+                qos_nj_20 += 1
+        task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
+    task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))        
+    print("SPB Number: ", total)
+    print("Qos 100: ", qos_100)
+    print("Qos 50: ", qos_50)
+    print("Qos 20: ", qos_20)
+    print("Qos good 100: ", qos_good_100, qos_good_100/qos_100)
+    print("Qos good 50: ", qos_good_50, qos_good_50/qos_50)
+    print("Qos good 20: ", qos_good_20, qos_good_20/ qos_20)
+    print("Qos total: ", qos_good_100+qos_good_50+qos_good_20, (qos_good_100+qos_good_50+qos_good_20) / (qos_100+qos_50+qos_20))
+    print("under 100: ", under_100)
+    print("under 50: ", under_50)
+    print("under 20: ", under_20)
+    print(qos_bj_100_good, qos_bj_50_good ,qos_nj_100_good, qos_nj_50_good, qos_nj_20_good)
+    print(qos_bj_100, qos_bj_50 ,qos_nj_100, qos_nj_50, qos_nj_20)
+    print(BJ_machine1_50, BJ_machine1_50_good)
+    print(BJ_machine2_50, BJ_machine2_50_good)
+    total = TOTAL
+    proof.real_nums = total
+    proof.num_tasks = total
+    # proof.yield_100 = qos_good_100 / qos_100
+    # proof.yield_50 = qos_good_50 / qos_50
+    # proof.yield_20 = qos_good_20 / qos_20
+    all = max(total,  qos_100+qos_50+qos_20)
+    proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
+    proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
+    proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all 
+    total_time = (last_time - first_time) * 1. / 1000000000
+    proof.goodput_100 = qos_good_100 / total_time
+    proof.goodput_50 = qos_good_50 / total_time
+    proof.goodput_20 = qos_good_20 / total_time
+  
 
 def analyze_quality_spb_v2(log_data_sorted, proof, prefix):
     total = 0

@@ -1,3 +1,4 @@
+from distutils.command.build_scripts import first_line_re
 import os
 import sys
 from src.analyzer import load_logs_from_dir, list_valid_logs_net
@@ -128,6 +129,40 @@ def compress_final_data(data, time_interval):
     return total_data
 
 
+def compress_final_data_machine(data, time_interval):
+    beg_time = data[0][0] // time_interval
+    end_time = data[len(data) - 1][0] // time_interval
+
+    total_data = [[i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] for i in range(beg_time, end_time + 1)]
+    for row in data:
+        time = row[0] // time_interval
+        idx = time - beg_time
+
+        bj3_cpu_time = row[1]
+        bj9_cpu_time = row[3]
+        nj4_cpu_time = row[5]
+        nj5_cpu_time = row[7]
+
+        bj3_pod_num = row[2]
+        bj9_pod_num = row[4]
+        nj4_pod_num = row[6]
+        nj5_pod_num = row[8]
+
+        total_data[idx][1] += bj3_cpu_time
+        total_data[idx][3] += bj9_cpu_time
+        total_data[idx][5] += nj4_cpu_time
+        total_data[idx][7] += nj5_cpu_time
+        total_data[idx][9] = total_data[idx][1] + total_data[idx][3] + total_data[idx][5] + total_data[idx][7]
+
+        total_data[idx][2] = bj3_pod_num if bj3_pod_num > total_data[idx][2] else total_data[idx][2]
+        total_data[idx][4] = bj9_pod_num if bj9_pod_num > total_data[idx][4] else total_data[idx][4]
+        total_data[idx][6] = nj4_pod_num if nj4_pod_num > total_data[idx][6] else total_data[idx][6]
+        total_data[idx][8] = nj5_pod_num if nj5_pod_num > total_data[idx][8] else total_data[idx][8]
+        total_data[idx][10] = total_data[idx][2] + total_data[idx][4] + total_data[idx][6] + total_data[idx][8]
+
+    return total_data
+
+
 def get_first_time(dirpath):
     log_dirname = ""
     contents = os.listdir(os.path.join(dirpath, "../"))
@@ -151,6 +186,37 @@ def get_first_time(dirpath):
             first_time_full = logs[0].time
 
     return (first_time_full // 1000000)
+
+
+def list_total_cput_each_machine(dirpath, noise):
+    dirs = ["lab3n", "lab9", "hbnj4", "hbnj5"]
+    pos_data = []
+    for dir in dirs:
+        sub_path = os.path.join(dirpath, dir)
+        item = cal_pos_cpu(sub_path, noise)
+        pos_data.append(item)
+
+    bj_data = combine_data(pos_data[0], pos_data[1])
+    nj_data = combine_data(pos_data[2], pos_data[3])
+
+    all_data = combine_data(bj_data, nj_data)
+    if len(all_data) == 0:
+        return []
+
+    beg_time = all_data[0][0]
+    end_time = all_data[len(all_data) - 1][0]
+
+    final_data = [[i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] for i in range(beg_time, end_time + 1)]
+    for i_pos, pos_d in enumerate(pos_data):
+        for row in pos_d:
+            time = row[0]
+            idx = time - beg_time
+            final_data[idx][2*i_pos+1:2*i_pos+3] = row[1:3]
+    for row in all_data:
+        time = row[0]
+        idx = time - beg_time
+        final_data[idx][9:11] = row[1:3]
+    return final_data
 
 
 def list_total_cpu(dirpath, noise):
@@ -199,11 +265,16 @@ def filter_data(data, f):
 def write_file(data, file_name):
     with open(file_name, "w") as f:
         for row in data:
-            txt = "{},{},{},{},{},{},{}\n".format(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            row[0] = row[0] % 1000000
+            txt = ','.join(map(str, row)) + '\n'
+            # txt = "{},{},{},{},{},{},{}\n".format(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
             f.write(txt)
 
 
 def cal_summary(data):
+    if len(data) == 0:
+        return [0] * 7
+
     sum = [0] * 6
     for row in data:
         for i in range(6):
@@ -214,6 +285,41 @@ def cal_summary(data):
         summary[i] = sum[i] / len(data)
     summary[6] = summary[4] / summary[5]
     return summary
+
+
+def analyze_machine(dirpath, noise):
+    flag = "noise" if noise else "load"
+
+    total_date = list_total_cput_each_machine(dirpath, noise)
+    print("total_data length:", len(total_date))
+    if len(total_date) == 0:
+        print("no such data: ", dirpath, noise)
+        return
+
+    first_time = get_first_time(dirpath)
+    print("first_time: ", first_time)
+
+    # total 1ms
+    print("cal k8s cpu alloc 1ms ......")
+    filtered_data = filter_data(total_date,
+                                lambda log: 0 <= log[0] < first_time + 20000000)
+    write_file(filtered_data, dirpath + "/../k8s_machine_{}_cpu_1ms.csv".format(flag))
+    # summary2 = cal_summary(filtered_data)
+
+    # total 100ms
+    resolution = 300
+    print("cal k8s cpu alloc %dms ......"%resolution)
+    compressed_data = compress_final_data_machine(total_date, resolution)
+    filtered_data = filter_data(compressed_data,
+                                lambda log: 0 // resolution <= log[0] < (first_time + 20000000) // resolution)
+    write_file(filtered_data, dirpath + f"/../k8s_machine_{flag}_cpu_{resolution}ms.csv")
+    # summary3 = cal_summary(filtered_data)
+
+    # summary_file = open(dirpath + "/../k8s_{}_cpu_summary.csv".format(flag), "w")
+    # # summary_file.write("20_20.5," + ','.join(map(str, summary1)) + "\n")
+    # summary_file.write("1ms," + ','.join(map(str, summary2)) + "\n")
+    # summary_file.write("100ms," + ','.join(map(str, summary3)) + "\n")
+    # summary_file.close()
 
 
 def analyze(dirpath, noise):
@@ -229,16 +335,16 @@ def analyze(dirpath, noise):
     print("first_time: ", first_time)
 
     # 20-20.5
-    print("cal k8s cpu alloc 20-20.5 ......")
-    filtered_data = filter_data(total_date,
-                                lambda log: first_time + 20 * 1000 < log[0] <= first_time + 20.5 * 1000)
-    write_file(filtered_data, dirpath + "/../k8s_{}_cpu_20-20.5.csv".format(flag))
-    summary1 = cal_summary(filtered_data)
+    # print("cal k8s cpu alloc 20-20.5 ......")
+    # filtered_data = filter_data(total_date,
+    #                             lambda log: first_time + 20 * 1000 < log[0] <= first_time + 20.5 * 1000)
+    # write_file(filtered_data, dirpath + "/../k8s_{}_cpu_20-20.5.csv".format(flag))
+    # summary1 = cal_summary(filtered_data)
 
     # total 1ms
     print("cal k8s cpu alloc 1ms ......")
     filtered_data = filter_data(total_date,
-                                lambda log: first_time <= log[0] < first_time + 200000)
+                                lambda log: 0 <= log[0] < first_time + 20000000)
     write_file(filtered_data, dirpath + "/../k8s_{}_cpu_1ms.csv".format(flag))
     summary2 = cal_summary(filtered_data)
 
@@ -247,12 +353,12 @@ def analyze(dirpath, noise):
     print("cal k8s cpu alloc %dms ......"%resolution)
     compressed_data = compress_final_data(total_date, resolution)
     filtered_data = filter_data(compressed_data,
-                                lambda log: first_time // resolution <= log[0] < (first_time + 200000) // resolution)
+                                lambda log: 0 // resolution <= log[0] < (first_time + 20000000) // resolution)
     write_file(filtered_data, dirpath + f"/../k8s_{flag}_cpu_{resolution}ms.csv")
     summary3 = cal_summary(filtered_data)
 
     summary_file = open(dirpath + "/../k8s_{}_cpu_summary.csv".format(flag), "w")
-    summary_file.write("20_20.5," + ','.join(map(str, summary1)) + "\n")
+    # summary_file.write("20_20.5," + ','.join(map(str, summary1)) + "\n")
     summary_file.write("1ms," + ','.join(map(str, summary2)) + "\n")
     summary_file.write("100ms," + ','.join(map(str, summary3)) + "\n")
     summary_file.close()
@@ -265,5 +371,7 @@ if __name__ == '__main__':
 
     path = sys.argv[1]
 
-    analyze(path, False)
-    analyze(path, True)
+    # analyze(path, False)
+    # analyze(path, True)
+
+    analyze_machine(path, False)
