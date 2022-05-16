@@ -118,6 +118,12 @@ def compress_final_data(data, time_interval):
         bj_pod_num = row[2]
         nj_pod_num = row[4]
 
+        if idx >= len(total_data):
+            print(time_interval)
+            print(data[0])
+            print(data[len(data)-1])
+            print(row)
+            print(beg_time, end_time)
         total_data[idx][1] += bj_cpu_time
         total_data[idx][3] += nj_cpu_time
         total_data[idx][5] += all_cpu_time
@@ -265,7 +271,7 @@ def filter_data(data, f):
 def write_file(data, file_name):
     with open(file_name, "w") as f:
         for row in data:
-            row[0] = row[0] % 1000000
+            row[0] = row[0]
             txt = ','.join(map(str, row)) + '\n'
             # txt = "{},{},{},{},{},{},{}\n".format(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
             f.write(txt)
@@ -371,7 +377,7 @@ if __name__ == '__main__':
 
     path = sys.argv[1]
 
-    # analyze(path, False)
-    # analyze(path, True)
+    analyze(path, False)
+    analyze(path, True)
 
-    analyze_machine(path, False)
+    # analyze_machine(path, False)

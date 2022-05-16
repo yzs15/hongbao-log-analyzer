@@ -8,6 +8,8 @@ net_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-net.js
 spb_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-spb.json"
 
 net_exec_time = (4889246.666, 8059651.437)
+# spb_exec_time = (6465674.082, 9447340.816)
+spb_exec_time = (6101418.568, 8057716.844)
 
 time_interval = 100 * 1000 * 1000
 
@@ -50,10 +52,11 @@ def get_qos(total_id):
 def add2timeline(timeline, ts_start, duration, resource, unit_idx, location, time_interval):
     def add_delta(idx, delta):
         if idx not in timeline:
+            # fast_bj, fast_nj, slow_bj, slow_nj
             timeline[idx] = [0, 0, 0, 0]
         timeline[idx][unit_idx*2+location-1] += delta
 
-    ts_end = ts_start + duration
+    ts_end = ts_start + duration - 1
     start_idx = int(ts_start // time_interval)
     end_idx = int(ts_end // time_interval)
 
@@ -119,27 +122,32 @@ def calculate_need(parent, env, time_interval):
     if env == 'net':
         exec_times = net_exec_time
     if env == 'spb':
-        exec_times = cal_exec_ave(msg_chains)
+        # exec_times = cal_exec_ave(msg_chains)
+        # exec_times = spb_exec_time
+        exec_times = net_exec_time
     print(env, exec_times)
 
     timeline: dict[int](int,int) = {} 
+    no_task = 0
     for msg_id, logs in msg_chains:
         if get_location(msg_id) > 2:  # invalid message id
             continue
-        if len(logs) < 2:  # 没有到 msg svr 发出
+        if len(logs) < 1:  # 没有到 msg svr 发出
             # print('Skip for length')
             continue
         if check_noise(msg_id) or check_warm(msg_id):
             # print(f'Skip for noise:{check_noise(msg_id)} warm:{check_warm(msg_id)}')
             continue
-
+        
+        no_task += 1
         qos = get_qos(msg_id)
         location = get_location(msg_id)
-        send_time = logs[1].time
+        send_time = logs[0].time
         exec_time = exec_times[location-1]
         add2timeline(timeline, send_time, exec_time, 1, 0, location, time_interval)
         add2timeline(timeline, send_time, qos, exec_time / qos, 1, location, time_interval)
-    
+    print('==> no_task: ', no_task)
+
     timeline_list = list(timeline.items())
     timeline_list.sort(key=lambda x: x[0])
 
@@ -152,9 +160,9 @@ def calculate_need(parent, env, time_interval):
         # ts, fast_bj, fast_nj, fast_all, slow_bj, slow_nj, slow_all
         record = [ts_cur, 0, 0, 0, 0, 0, 0]
         if ts_cur == timeline_list[i_timeline][0]:
-            record[1:3] = timeline_list[i_timeline][1][0:2]
+            record[1:3] = timeline_list[i_timeline][1][0:2] # fast
             record[3] = sum(record[1:3])
-            record[4:6] = timeline_list[i_timeline][1][2:4]
+            record[4:6] = timeline_list[i_timeline][1][2:4] # slow
             record[6] = sum(record[4:6])
             i_timeline += 1
         for i in range(1, 7):

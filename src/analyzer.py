@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import os
 
 FULL = (1 << 8) - 1
-TOTAL = 320000
+TOTAL = 25600
 
 
 class Analyzer:
@@ -1630,15 +1630,15 @@ def analyze_quality_net_v2(log_data_sorted, proof, prefix):
     # proof.yield_50 = qos_good_50 / qos_50
     # proof.yield_20 = qos_good_20 / qos_20
 
-    all = max(total/ 10,  qos_100+qos_50+qos_20)
+    all = max(total / 10,  qos_100+qos_50+qos_20)
     proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all
     total_time = (last_time - first_time) * 1. / 1000000000
     print("-----", all, total, total_time, qos_good_100+qos_good_50+qos_good_20, qos_100+qos_50+qos_20)
-    proof.goodput_100 = qos_good_100 / total_time
-    proof.goodput_50 = qos_good_50 / total_time
-    proof.goodput_20 = qos_good_20 / total_time
+    proof.goodput_100 = qos_good_100 / total_time * 10
+    proof.goodput_50 = qos_good_50 / total_time * 10
+    proof.goodput_20 = qos_good_20 / total_time * 10
 
 def analyze_quality_net_v3(log_data_sorted, proof, prefix):
     total = 0

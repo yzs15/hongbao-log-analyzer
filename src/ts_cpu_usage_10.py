@@ -71,7 +71,7 @@ def analyze(path, worker_ID):
         if log_times[i] > max_core:
             max_core = max(max_core, log_times[i])
         f.write(str(i % 1000000) + "," + str(log_times[i]) + "\n")
-    print(path, number, total_time, max_core / time_interval)
+    print(path, number, total_time, total_time/number, max_core / time_interval)
 
     f.close()
     return log_times
@@ -87,7 +87,10 @@ def calculate_cpu_usage(path, interval, workerID):
     index = 0
     for dir in dirs:
         log_times = analyze(os.path.join(path, dir), workerID)
+        # total = 0
         for i in log_times:
+            # total += log_times[i] 
+            # print(i, log_times[i])
             if log_times_total.__contains__(i):
                 log_times_total[i] += log_times[i]
             else:
@@ -97,6 +100,7 @@ def calculate_cpu_usage(path, interval, workerID):
             else:
                 log_times_total_detail[i] = [0, 0, 0, 0]
                 log_times_total_detail[i][index] = log_times[i]
+        # print(dir, total /len(log_times))
         index += 1
 
     max_core = 0
@@ -112,7 +116,7 @@ def calculate_cpu_usage(path, interval, workerID):
     keys.sort()
     start = keys[0]
     end = keys[-1]
-    for i in range(start, end):
+    for i in range(start, end+1):
         total_time = 0
         f.write(str(i % 1000000) + ",")
         if log_times_total_detail.__contains__(i):

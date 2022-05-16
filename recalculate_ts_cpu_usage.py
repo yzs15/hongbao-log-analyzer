@@ -39,11 +39,11 @@ def recalculate_one(parent):
     #         start(net_config, log_path)
     
     if is_spb:  
-        if '100' in parent:
-            return
+        # if '100' in parent:
+        #     return
         path = os.path.join(parent,"ts-cpu")
         try:
-            calculate_cpu_usage(path, 100, "99999999")
+            calculate_cpu_usage(path, 100, "99999998")
         except:
             print(path)   
 
@@ -61,7 +61,7 @@ if __name__=="__main__":
         if  "spb" not in parent:
             continue
         parents.append(path)
-    p = Pool(8)
+    p = Pool(1)
     res_li = []
     for parent in parents:
         res = p.apply_async(recalculate_one, (parent,))
