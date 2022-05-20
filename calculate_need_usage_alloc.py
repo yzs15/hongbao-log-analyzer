@@ -282,8 +282,8 @@ def calculate_one(parent):
             parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
         output_timeline(timeline, out_filepath)
 
-    # result = build_str_entropy(timeline, parent)
-    result = build_str_entropy_v6(timeline, parent)
+    result = build_str_entropy(timeline, parent)
+    # result = build_str_entropy_v5(timeline, parent)
     # result =  build_str_an_ua_eu_with_var(timeline, parent)
     if result is None:
         return 0
@@ -350,7 +350,7 @@ def build_str(timeline, parent):
     ]))
 
 
-def build_str_entropy(timeline, parent):
+def build_str_entropy_v5(timeline, parent):
     t_run, env, no_task, config, acc_speed, peak_task = extract_meta(parent)
 
     yld = float(get_yield(parent)) / 100
@@ -422,8 +422,8 @@ def build_str_entropy(timeline, parent):
     ]))
 
 
-# f(ui) = (((1-qi*ui)/(1+qi*ui))**2) / 16
-def build_str_entropy_v6(timeline, parent):
+
+def build_str_entropy(timeline, parent):
     t_run, env, no_task, config, acc_speed, peak_task = extract_meta(parent)
 
     yld = float(get_yield(parent)) / 100
@@ -447,7 +447,7 @@ def build_str_entropy_v6(timeline, parent):
         timeline, i_need_beg, i_need_end, env)
     on_need, uo_need, eu_need, en_need = cal_ratio(
         need_need, usage_need, occupy_need, eff_need)
-    an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need = get_an_ua_eu_en_entropy(
+    an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need = get_an_ua_eu_en_entropy_v7(
         timeline, i_need_beg, i_need_end, 1)
 
     i_alloc_beg, i_alloc_end = find_alloc_range(timeline, parent)
@@ -455,8 +455,8 @@ def build_str_entropy_v6(timeline, parent):
         timeline, i_alloc_beg, i_alloc_end, env)
     on_alloc, uo_alloc, eu_alloc, en_alloc = cal_ratio(
         need_alloc, usage_alloc, occupy_alloc, eff_alloc)
-    an_S_alloc, an_log_S_alloc, ua_S_alloc, ua_log_S_alloc, eu_S_alloc, eu_log_S_alloc, en_S_alloc, en_log_S_alloc = get_an_ua_eu_en_entropy(
-        timeline, i_need_beg, i_need_end, 1)
+    an_S_alloc, an_log_S_alloc, ua_S_alloc, ua_log_S_alloc, eu_S_alloc, eu_log_S_alloc, en_S_alloc, en_log_S_alloc = get_an_ua_eu_en_entropy_v7(
+        timeline, i_alloc_beg, i_alloc_end, 1)
 
     if on_need + uo_need + eu_need == -3 and on_alloc + uo_alloc + eu_alloc == -3:
         return 0
@@ -801,8 +801,8 @@ def get_occupy_need_entropy(timeline, i_beg, i_end, env='net'):
         entropy += -16 * pu * math.log2(pu)
     return entropy, log_entropy
 
-
-def get_an_ua_eu_en_entropy(timeline, i_beg, i_end, span=1):
+# f(ui) = (((1-qi*ui)/(1+qi*ui))**2) / 16
+def get_an_ua_eu_en_entropy_v6(timeline, i_beg, i_end, span=1):
     if i_beg < 0:
         return -1, -1, -1, -1, -1, -1, -1, -1
 
@@ -842,7 +842,7 @@ def get_an_ua_eu_en_entropy(timeline, i_beg, i_end, span=1):
             i_cur += 1
             cnt += 1
         
-        an_ratio = min(100, int(alloc_item/need_item * 100 + 0.5)) if need_item > 0 else 999999999999999999999999999
+        an_ratio = int(alloc_item/need_item * 100 + 0.5) if need_item > 0 else 999999999999999999999999999
         add_dict(an_items, an_ratio/100.)
         
         ua_ratio = min(100, int(usage_item/alloc_item * 100 + 0.5)) if alloc_item > 0 else 100
@@ -892,6 +892,118 @@ def get_an_ua_eu_en_entropy(timeline, i_beg, i_end, span=1):
     en_S, en_log_S = cal_entropy(en_items)
 
     return an_S, an_log_S, ua_S, ua_log_S, eu_S, eu_log_S, en_S, en_log_S
+
+
+# AN:    f(ui, ai) = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
+# UA,EU: f(ui, ai) = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
+def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
+    if i_beg < 0:
+        return -1, -1, -1, -1, -1, -1, -1, -1
+
+    an_items = {}
+    ua_items = {}
+    eu_items = {}
+    en_items = {}
+
+    def add_dict(items, item):
+        if item not in items:
+            items[item] = 1
+        else:
+            items[item] += 1
+
+    i_cur = i_beg
+    while i_cur <= i_end:
+        cnt = 0
+        need_item = 0
+        usage_item = 0
+        alloc_item = 0
+        eff_item = 0
+        while i_cur <= i_end and cnt < span:
+            unit = timeline[i_cur]
+            need_all = unit[NEED_FAST_ALL_IDX]
+            need_item += need_all
+
+            usage_all = unit[USAGE_ALL_IDX]
+            usage_item += usage_all
+
+            quota_all = unit[ALLOC_ALL_IDX]
+            alloc_all = max(usage_all, quota_all)
+            alloc_item += alloc_all
+
+            eff_all = unit[EFF_U_ALL_IDX]
+            eff_item += eff_all
+            
+            i_cur += 1
+            cnt += 1
+        
+        an_ratio = int(alloc_item/need_item * 100 + 0.5) if need_item > 0 else 999999999999999999999999999
+        add_dict(an_items, an_ratio/100.)
+        
+        ua_ratio = min(100, int(usage_item/alloc_item * 100 + 0.5)) if alloc_item > 0 else 100
+        add_dict(ua_items, ua_ratio/100.)
+        
+        eu_ratio = min(100, int(eff_item/usage_item * 100 + 0.5)) if usage_item > 0 else 100
+        add_dict(eu_items, eu_ratio/100.)
+        
+        en_ratio = min(100, int(eff_item/need_item * 100 + 0.5)) if need_item > 0 else 100
+        add_dict(en_items, en_ratio/100.)
+    
+    def cal_ai(items:dict, total, ui):
+        ai = 0
+        exist_same = False
+        for un, cnt_n in items.items():
+            if ui == un:
+                exist_same = True
+                continue
+            pn = cnt_n / total
+            ai += pn * abs(ui - un)
+        assert (exist_same == True)
+        return ai
+
+    def cal_entropy_an(items: dict):
+        total = 0
+        for cnt in items.values():
+            total += cnt
+
+        entropy, log_entropy = 0, 0
+        for ui, cnt_i in items.items():
+            pi = cnt_i / total
+            log_entropy += -1 * pi * math.log2(pi)
+
+            if ui == 1:
+                continue
+            
+            ai = cal_ai(items, total, ui)
+            fi = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
+            qi = pi * fi
+            entropy += -qi * math.log2(qi)
+        return 4 * entropy, log_entropy
+
+    def cal_entropy_ua_eu(items: dict):
+        total = 0
+        for cnt in items.values():
+            total += cnt
+
+        entropy, log_entropy = 0, 0
+        for ui, cnt_i in items.items():
+            pi = cnt_i / total
+            log_entropy += -1 * pi * math.log2(pi)
+
+            if ui == 1:
+                continue
+
+            ai = cal_ai(items, total, ui)
+            fi = (1+ai-ui) / 8
+            qi = pi * fi
+            entropy += -qi * math.log2(qi)
+        return 4 * entropy, log_entropy
+
+    an_S, an_log_S = cal_entropy_an(an_items)
+    ua_S, ua_log_S = cal_entropy_ua_eu(ua_items)
+    eu_S, eu_log_S = cal_entropy_ua_eu(eu_items)
+    # en_S, en_log_S = cal_entropy(en_items)
+
+    return an_S, an_log_S, ua_S, ua_log_S, eu_S, eu_log_S, 999, 999
 
 
 def get_un(timeline, i_beg, i_end, env='net'):
@@ -1040,7 +1152,7 @@ if __name__ == "__main__":
 
     suffix = hashlib.md5(grandParent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
-        grandParent, f'on_uo_eu_en_entropy_v6-{suffix}.csv')
+        grandParent, f'an_ua_eu_en_entropy_v7-{suffix}.csv')
     with open(out_filepath, 'w+') as f:
         print(out_filepath)
         # f.write(','.join(['t_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task', 'un', 'uo_alloc', 'uo_var_alloc', 'acc_alloc', 'acc_var_alloc', 'ur_need', 'ur_alloc', 'yield', 'goodput', 'need_beg', 'need_len', 'alloc_len'])+'\n')
