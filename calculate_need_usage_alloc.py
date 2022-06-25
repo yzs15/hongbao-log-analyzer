@@ -1,3 +1,28 @@
+"""
+
+计算熵
+
+
+概要过程：
+
+`calculate_one`函数针对一次实验进行分析，首先以`time_interval`为时间间隔，对CPU的分配、使用情况进行统计，构建时间线
+
+然后调用用于分析时间线的函数，前后有多个版本，最终是`build_str_entropy`，在该函数中计算 从需求发起到需求结束 和 从需求发起到结束分配 两个时间段的熵，计算熵的版本最终为`get_an_ua_eu_en_entropy_v7`函数。两时段的计算方法相同，只是时间范围不同，确定时间范围对应的是`find_need_range`和`find_alloc_range`两个函数。
+
+最终会输出一个以逗号为分割，包含任务信息、熵、通量、良率等信息的字符串，并由`calculate_one`返回至主函数
+
+
+使用方法：
+
+python3 calculate_need_usage_alloc.py <日志数据根目录>
+
+例：python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-yuzishu-5-4-k8s-peak-50-speed-1
+
+在目录中会输出一个csv文件，文件名在main函数中设定
+
+
+"""
+
 import hashlib
 from json import tool
 import math
@@ -442,6 +467,7 @@ def build_str_entropy(timeline, parent):
             eu = eff_u / usage
         return on, uo, eu, en
 
+    # 计算从发起需求到请求结束时间段的熵
     i_need_beg, i_need_end = find_need_range(timeline, parent)
     need_need, usage_need, occupy_need, eff_need = get_all_need_usage_occupy_eff(
         timeline, i_need_beg, i_need_end, env)
@@ -450,6 +476,7 @@ def build_str_entropy(timeline, parent):
     an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need = get_an_ua_eu_en_entropy_v7(
         timeline, i_need_beg, i_need_end, 1)
 
+    # 计算从发起请求到分配结束时间段的熵
     i_alloc_beg, i_alloc_end = find_alloc_range(timeline, parent)
     need_alloc, usage_alloc, occupy_alloc, eff_alloc = get_all_need_usage_occupy_eff(
         timeline, i_alloc_beg, i_alloc_end, env)
