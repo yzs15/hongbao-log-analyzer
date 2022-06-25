@@ -2,6 +2,7 @@ from distutils.command.build_scripts import first_line_re
 import os
 import sys
 from src.analyzer import load_logs_from_dir, list_valid_logs_net
+import hashlib
 
 
 def cal_pos_cpu(path, noise):
@@ -318,7 +319,8 @@ def analyze_machine(dirpath, noise):
     compressed_data = compress_final_data_machine(total_date, resolution)
     filtered_data = filter_data(compressed_data,
                                 lambda log: 0 // resolution <= log[0] < (first_time + 20000000) // resolution)
-    write_file(filtered_data, dirpath + f"/../k8s_machine_{flag}_cpu_{resolution}ms.csv")
+    suffix = hashlib.md5(dirpath.encode('utf-8')).hexdigest()[:6]
+    write_file(filtered_data, dirpath + f"/../k8s_machine_{flag}_cpu_{resolution}ms-{suffix}.csv")
     # summary3 = cal_summary(filtered_data)
 
     # summary_file = open(dirpath + "/../k8s_{}_cpu_summary.csv".format(flag), "w")
@@ -377,7 +379,7 @@ if __name__ == '__main__':
 
     path = sys.argv[1]
 
-    analyze(path, False)
-    analyze(path, True)
+    # analyze(path, False)
+    # analyze(path, True)
 
-    # analyze_machine(path, False)
+    analyze_machine(path, False)
