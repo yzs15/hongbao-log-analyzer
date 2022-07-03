@@ -21,7 +21,13 @@ def check_noise(message_id):
 
 def check_warm(message_id):
     message_id >>= 40
+    message_id = message_id & ((1<<22)-1)
     return message_id < 2
+
+
+def check_person(message_id):
+    device = (message_id>>20) & ((1<<20)-1)
+    return device < 4
 
 
 def get_location(message_id):

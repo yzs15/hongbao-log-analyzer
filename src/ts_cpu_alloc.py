@@ -117,12 +117,13 @@ def filter_data(data, f):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("ts_cpu_alloc.py TS-CPU-DIR")
+        print("ts_cpu_alloc.py TS-LOG-DIR")
         exit(1)
 
     dir_path = sys.argv[1]
 
     log_data_sorted = load_logs_from_dir(dir_path, 0)
+    print(len(log_data_sorted))
     machine_task_duration = list_task_duration(log_data_sorted)
 
     print("cal ts cpu alloc 100ms ......")

@@ -1,3 +1,12 @@
+source venv/bin/activate
+
+python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-6-29-valid-linear
+python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-6-29-valid-burst
+python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-7-1-valid-spb-linear
+python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-7-2-valid-all-burst
+python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-7-2-valid-all-linear
+exit
+
 FILE_NAME=an_ua_eu_en_entropy_v7
 
 python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-copy-3-27-vaild-acc-yield-spb

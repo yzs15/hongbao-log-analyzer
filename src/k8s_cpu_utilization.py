@@ -21,6 +21,8 @@ def cal_pos_cpu(path, noise):
         rows = []
         for line in lines:
             rows.append(line.split(','))
+        if len(rows) == 0:
+            continue
 
         pod_data = []
         # cur_beg = (int(rows[0][1]) // 1000000) % 1000000
@@ -196,7 +198,7 @@ def get_first_time(dirpath):
 
 
 def list_total_cput_each_machine(dirpath, noise):
-    dirs = ["lab3n", "lab9", "hbnj4", "hbnj5"]
+    dirs = ["lab3n", "lab9", "hbnj4", "hbnj3"]
     pos_data = []
     for dir in dirs:
         sub_path = os.path.join(dirpath, dir)
@@ -227,7 +229,7 @@ def list_total_cput_each_machine(dirpath, noise):
 
 
 def list_total_cpu(dirpath, noise):
-    dirs = ["lab3n", "lab9", "hbnj4", "hbnj5"]
+    dirs = ["lab3n", "lab9", "hbnj4", "hbnj3"]
     pos_data = []
     for dir in dirs:
         sub_path = os.path.join(dirpath, dir)
@@ -314,7 +316,7 @@ def analyze_machine(dirpath, noise):
     # summary2 = cal_summary(filtered_data)
 
     # total 100ms
-    resolution = 300
+    resolution = 100
     print("cal k8s cpu alloc %dms ......"%resolution)
     compressed_data = compress_final_data_machine(total_date, resolution)
     filtered_data = filter_data(compressed_data,
@@ -357,7 +359,7 @@ def analyze(dirpath, noise):
     summary2 = cal_summary(filtered_data)
 
     # total 100ms
-    resolution = 300
+    resolution = 100
     print("cal k8s cpu alloc %dms ......"%resolution)
     compressed_data = compress_final_data(total_date, resolution)
     filtered_data = filter_data(compressed_data,
