@@ -27,6 +27,10 @@ do
     python3 calculate_need_usage_alloc.py $root_dir
     cat $root_dir/$FILE_NAME* >> $DISK_PREFIX/$FILE_NAME.csv
 done
+
+resort_root_dir=$DISK_PREFIX/logs-yuzishu-5-1-valid-spb-resort
+python3 calculate_need_usage_alloc.py  $resort_root_dir
+cat $resort_root_dir/$FILE_NAME* > $DISK_PREFIX/$FILE_NAME-resort.csv
 exit
 
 

@@ -283,38 +283,41 @@ def calculate_one(parent, entropy_filepath):
             print('!!!! ', parent, "no effective usage !!!!")
             return 0
 
+        need_len, au_len, eff_len = len(need_timeline), len(alloc_usage_timeline), len(eff_timeline)
+        ts_beg_need, ts_end_need = need_timeline[0][0], need_timeline[need_len-1][0]
+        ts_beg_au, ts_end_au = alloc_usage_timeline[0][0], alloc_usage_timeline[au_len-1][0]
+        ts_beg_eff, ts_end_eff = eff_timeline[0][0], eff_timeline[eff_len-1][0]
+
+        ts_beg_need %= 1000000
+        ts_end_need %= 1000000
+        ts_beg_au %= 1000000
+        ts_end_au %= 1000000
+        ts_beg_eff %= 1000000
+        ts_end_eff %= 1000000
+
+        ts_first = min(ts_beg_need, ts_beg_au, ts_beg_eff)
+        ts_last = max(ts_end_need, ts_end_au, ts_end_eff)
+
         i_need = 0
         i_au = 0
         i_eff = 0
         timeline = []
-        while i_need < len(need_timeline) or i_au < len(alloc_usage_timeline) or i_eff < len(eff_timeline):
+        ts_cur = ts_first
+        while ts_cur != ts_last+1:
             record = [0] * 16
-
-            need_unit = need_timeline[i_need] if i_need < len(
-                need_timeline) else [0] * len(need_timeline[0])
-            au_unit = alloc_usage_timeline[i_au] if i_au < len(alloc_usage_timeline) else [
-                0] * len(alloc_usage_timeline[0])
-            eff_unit = eff_timeline[i_eff] if i_eff < len(
-                eff_timeline) else [0] * len(eff_timeline[0])
-
-            ts_need = need_unit[0] % 1000000 if need_unit[0] != 0 else 1000000
-            ts_au = au_unit[0] % 1000000 if au_unit[0] != 0 else 1000000
-            ts_eff = eff_unit[0] % 1000000 if eff_unit[0] != 0 else 1000000
-            if ts_need <= ts_au and ts_need <= ts_eff:
-                record[0] = ts_need
-                if i_need >= len(need_timeline):
-                    print(len(need_timeline))
-                record[1:7] = need_unit[1:]
+            record[0] = ts_cur
+            if i_need < need_len and need_timeline[i_need][0] % 1000000 == ts_cur:
+                record[1:7] = need_timeline[i_need][1:]
                 i_need += 1
-            if ts_au <= ts_need and ts_au <= ts_eff:
-                record[0] = ts_au
-                record[7:13] = au_unit[1:]
+            if i_au < au_len and alloc_usage_timeline[i_au][0] % 1000000 == ts_cur:
+                record[7:13] = alloc_usage_timeline[i_au][1:]
                 i_au += 1
-            if ts_eff <= ts_need and ts_eff <= ts_au:
-                record[0] = ts_eff
-                record[13:] = eff_unit[1:]
+            if i_eff < eff_len and eff_timeline[i_eff][0] % 1000000 == ts_cur:
+                record[13:] = eff_timeline[i_eff][1:]
                 i_eff += 1
             timeline.append(record)
+            ts_cur = (ts_cur+1) % 1000000
+
         out_filepath = os.path.join(
             parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
         output_timeline(timeline, out_filepath)
