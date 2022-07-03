@@ -198,7 +198,12 @@ def get_first_time(dirpath):
 
 
 def list_total_cput_each_machine(dirpath, noise):
-    dirs = ["lab3n", "lab9", "hbnj4", "hbnj3"]
+    dirs = ["lab3n", "lab9", "hbnj4"]
+    if os.path.exists(os.path.join(dirpath, 'hbnj3')):
+        dirs.append('hbnj3')
+    else:
+        dirs.append('hbnj5')
+
     pos_data = []
     for dir in dirs:
         sub_path = os.path.join(dirpath, dir)

@@ -141,14 +141,14 @@ if __name__ == '__main__':
     first_time = total_data_1ms[0][0]
 
     print("cal ts cpu alloc 20-20.5 ......")
-    data_20_20d5 = filter_data(total_data_1ms, lambda log: first_time + 20000 < log[0] < first_time + 20500)
-    print(len(data_20_20d5))
-    write_file(data_20_20d5, dir_path + "/../ts_cpu_alloc_20_20.5.csv")
-    summary2 = cal_summary(data_20_20d5)
+    # data_20_20d5 = filter_data(total_data_1ms, lambda log: first_time + 20000 < log[0] < first_time + 20500)
+    # print(len(data_20_20d5))
+    # write_file(data_20_20d5, dir_path + "/../ts_cpu_alloc_20_20.5.csv")
+    # summary2 = cal_summary(data_20_20d5)
 
     summary_file = open(dir_path + "/../ts_cpu_alloc_summary.csv", "w")
     summary_file.write("1ms," + ','.join(map(str, summary1)) + "\n")
-    summary_file.write("20_20.5," + ','.join(map(str, summary2)) + "\n")
+    # summary_file.write("20_20.5," + ','.join(map(str, summary2)) + "\n")
     summary_file.write("100ms," + ','.join(map(str, summary3)) + "\n")
     summary_file.close()
 

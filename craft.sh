@@ -1,13 +1,34 @@
 source venv/bin/activate
 
-python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-6-29-valid-linear
-python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-6-29-valid-burst
-python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-7-1-valid-spb-linear
-python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-7-2-valid-all-burst
-python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-june-7-2-valid-all-linear
+FILE_NAME=an_ua_eu_en_entropy_v7
+DISK_PREFIX='/mnt/g'
+
+ROOTS=( \
+"logs-june-6-29-valid-linear" \
+"logs-june-6-29-valid-burst" \
+"logs-june-7-1-valid-spb-linear" \
+"logs-june-7-2-valid-all-burst" \
+"logs-june-7-2-valid-all-linear" \
+"logs-copy-3-27-vaild-acc-yield-spb" \
+"logs-yuzishu-4-29-valid-acc-yield" \
+"logs-copy-vaild-burst" \
+"logs-yuzishu-5-4-k8s-peak-50-speed-1" \
+)
+
+# "logs-yuzishu-5-1-valid-spb-resort" \
+
+echo "" > $DISK_PREFIX/$FILE_NAME.csv
+for root in ${ROOTS[@]}
+do
+    root_dir="$DISK_PREFIX/$root"
+    rm -rf $root_dir/$FILE_NAME*
+    # rm -rf $root_dir/comp_ranges.json
+    
+    python3 calculate_need_usage_alloc.py $root_dir
+    cat $root_dir/$FILE_NAME* >> $DISK_PREFIX/$FILE_NAME.csv
+done
 exit
 
-FILE_NAME=an_ua_eu_en_entropy_v7
 
 python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-copy-3-27-vaild-acc-yield-spb
 python3 calculate_need_usage_alloc.py /Volumes/Elements/logs-yuzishu-4-29-valid-acc-yield

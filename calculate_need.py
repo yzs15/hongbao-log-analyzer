@@ -2,7 +2,7 @@ from multiprocessing import Pool
 import sys
 import os
 from src.analyzer import event_log
-from src.analyzer_local import load_logs_from_dir
+from src.analyzer_local import load_logs_from_dir, msg_id_dot2int
 
 net_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-net.json"
 spb_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-spb.json"
@@ -112,6 +112,38 @@ def cal_exec_ave(msg_chains):
     return tBjExecTotal / noBjRecord, tNjExecTotal / noNjRecord
 
 
+def load_log_beg_time(dir):
+    beg_times = dict()
+    filenames = os.listdir(dir)
+    for filename in filenames:
+        name, ext = os.path.splitext(filename)
+        if name.find("log") != -1 or ext != ".txt":
+            continue
+
+        with open(os.path.join(dir, filename), "r") as f:
+            while True:
+                line = f.readline().strip()
+                if line is None or line == "":
+                    break
+                
+                items = line.split(",")
+                if len(items) < 4:
+                    continue
+
+                if '.' in items[4]:
+                    msg_id = msg_id_dot2int(items[4])
+                else:
+                    msg_id = int(items[4])
+                time = int(items[3])
+                if time == -6795364578871345152:
+                    continue
+                assert time > 1600000000000000000, f'{dir}, {filename}, {items}'
+
+                if msg_id not in beg_times or beg_times[msg_id] > time:
+                    beg_times[msg_id] = time
+    return beg_times
+
+
 def calculate_need(parent, env, time_interval):
     log_dirpath = None
     for file in os.listdir(parent):
@@ -123,7 +155,9 @@ def calculate_need(parent, env, time_interval):
     if log_dirpath is None:
         print('Not found log dirpath')
         return []
-    msg_chains = load_logs_from_dir(log_dirpath, 0)  #type: list[list[(int, event_log)]]
+    
+    msg_beg_times = load_log_beg_time(log_dirpath)
+    # msg_chains = load_logs_from_dir(log_dirpath, 0)  #type: list[list[(int, event_log)]]
 
     if env == 'net':
         exec_times = net_exec_time
@@ -131,34 +165,38 @@ def calculate_need(parent, env, time_interval):
         # exec_times = cal_exec_ave(msg_chains)
         # exec_times = spb_exec_time
         exec_times = net_exec_time
-    print(env, exec_times)
+    # print(env, exec_times)
 
-    timeline: dict[int](int,int) = {} 
+    timeline = {} 
     no_task = 0
-    for msg_id, logs in msg_chains:
+    for msg_id, beg_time in msg_beg_times.items():
         if get_location(msg_id) > 2:  # invalid message id
             continue
-        if len(logs) < 1:  # 没有到 msg svr 发出
-            # print('Skip for length')
-            continue
+        # if len(logs) < 1:  # 没有到 msg svr 发出
+        #     # print('Skip for length')
+        #     continue
         if check_noise(msg_id) or check_warm(msg_id):
             # print(f'Skip for noise:{check_noise(msg_id)} warm:{check_warm(msg_id)}')
             continue
         
         no_task += 1
         qos = get_qos(msg_id)
+        if qos == -1:
+            continue
         location = get_location(msg_id)
-        send_time = logs[0].time
+        send_time = beg_time
         exec_time = exec_times[location-1]
         add2timeline(timeline, send_time, exec_time, 1, 0, location, time_interval)
         add2timeline(timeline, send_time, qos, exec_time / qos, 1, location, time_interval)
-    print('==> no_task: ', no_task)
+    
 
     timeline_list = list(timeline.items())
     timeline_list.sort(key=lambda x: x[0])
 
+    assert len(timeline_list) > 0, f'{parent}'
     ts_min = timeline_list[0][0]
     ts_max = timeline_list[len(timeline_list)-1][0]
+    print('\t\t', no_task, ts_min, ts_max)
 
     i_timeline = 0
     finial_timeline = []
@@ -205,7 +243,7 @@ if __name__=="__main__":
         #     continue
         parents.append(path)
     
-    p = Pool(8)
+    p = Pool(1)
     res_li = []
     for parent in parents:
         res = p.apply_async(calculate_one, (parent,))

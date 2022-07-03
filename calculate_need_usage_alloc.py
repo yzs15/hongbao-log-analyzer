@@ -30,16 +30,20 @@ from multiprocessing import Pool, Lock
 import sys
 import os
 import re
+from time import time
 import numpy as np
 
 from calculate_need import calculate_need, check_noise, check_warm, get_location, check_person
 from src.k8s_cpu_utilization import list_total_cpu, compress_final_data
 from calculate_eff_usage import calculate_eff_usage
-from src.analyzer_local import load_logs_from_dir
+from src.analyzer_local import load_logs_from_dir, msg_id_dot2int
 from src.analyzer import event_log
 
 time_interval = 100 * 1000 * 1000
 
+
+def get_mac_parent(parent):
+    return parent.replace('/mnt/g', '/Volumes/Elements')
 
 def get_k8s_req_lim(parent):
     grps = re.search(r'([0-9m]+)C(.*)C', parent)
@@ -76,6 +80,7 @@ def calculate_usage_alloc(env, parent, time_interval):
                 lambda x: x / (time_interval//1000000), record[4:7])
 
             timeline.append(record)
+        ini_timeline = None
 
     else:
         # 读取使用CPU
@@ -236,8 +241,9 @@ def calculate_one(parent, entropy_filepath):
     if not os.path.exists(os.path.join(parent, 'k8s-cpu')) and not os.path.exists(os.path.join(parent, 'ts-cpu')):
         print('Not found k8s-cpu or ts-cpu')
         return 0
-    print(parent)
-    suffix = hashlib.md5(parent.encode('utf-8')).hexdigest()[:6]
+    mac_parent = get_mac_parent(parent)
+    print(mac_parent)
+    suffix = hashlib.md5(mac_parent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
     # if not os.path.exists(out_filepath):
@@ -263,16 +269,18 @@ def calculate_one(parent, entropy_filepath):
     else:  # 文件不存在，需要计算
         need_timeline = calculate_need(parent, env, time_interval)
         if len(need_timeline) == 0:
+            print('!!!! ', parent, 'no need !!!!')
             return 0
 
         alloc_usage_timeline = calculate_usage_alloc(
             env, parent, time_interval)
         if len(alloc_usage_timeline) == 0:
+            print('!!!! ', parent, 'no usage !!!!')
             return 0
 
         eff_timeline = calculate_eff_usage(parent, env, time_interval)
         if len(eff_timeline) == 0:
-            print("No effective usage?")
+            print('!!!! ', parent, "no effective usage !!!!")
             return 0
 
         i_need = 0
@@ -294,15 +302,17 @@ def calculate_one(parent, entropy_filepath):
             ts_eff = eff_unit[0] % 1000000 if eff_unit[0] != 0 else 1000000
             if ts_need <= ts_au and ts_need <= ts_eff:
                 record[0] = ts_need
-                record[1:7] = need_timeline[i_need][1:]
+                if i_need >= len(need_timeline):
+                    print(len(need_timeline))
+                record[1:7] = need_unit[1:]
                 i_need += 1
             if ts_au <= ts_need and ts_au <= ts_eff:
                 record[0] = ts_au
-                record[7:13] = alloc_usage_timeline[i_au][1:]
+                record[7:13] = au_unit[1:]
                 i_au += 1
             if ts_eff <= ts_need and ts_eff <= ts_au:
                 record[0] = ts_eff
-                record[13:] = eff_timeline[i_eff][1:]
+                record[13:] = eff_unit[1:]
                 i_eff += 1
             timeline.append(record)
         out_filepath = os.path.join(
@@ -313,6 +323,7 @@ def calculate_one(parent, entropy_filepath):
     # result = build_str_entropy_v5(timeline, parent)
     # result =  build_str_an_ua_eu_with_var(timeline, parent)
     if result is None:
+        print('!!!! ', parent, ' str entropy is None !!!!')
         return 0
     
     with lock, open(entropy_filepath, 'a') as f:
@@ -503,7 +514,7 @@ def build_str_entropy(timeline, parent):
         timeline, i_alloc_beg, i_alloc_end, 1)
 
     if on_need + uo_need + eu_need == -3 and on_alloc + uo_alloc + eu_alloc == -3:
-        return 0
+        return None
 
     len_need_range = i_need_end - i_need_beg + 1
     len_alloc_range = i_alloc_end - i_alloc_beg + 1
@@ -577,81 +588,28 @@ EFF_U_ALL_IDX = 15
 
 
 def find_need_range(timeline, parent):
-    i_beg, i_end = find_comp_range(timeline, parent)
+    ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis = get_time_range(parent)
     
-    while timeline[i_beg][NEED_FAST_ALL_IDX] != 0:
-            i_beg -= 1
+    s_beg_time = (ts_first_thing_send//time_interval)%1000000
+    s_end_time = (ts_last_thing_send//time_interval)%1000000
+    
+    i_beg = 0
+    while timeline[i_beg][0] < s_beg_time:
+        i_beg += 1
+    while i_beg-1 >= 0 and timeline[i_beg-1][NEED_FAST_ALL_IDX] != 0:
+        i_beg -= 1
     while timeline[i_beg][NEED_FAST_ALL_IDX] == 0:
-            i_beg += 1
-    
+        i_beg += 1
+
+    i_end = i_beg
+    while i_end+1 < len(timeline) and timeline[i_end+1][0] <= s_end_time:
+        i_end += 1
+    while i_end+1 < len(timeline) and timeline[i_end+1][NEED_FAST_ALL_IDX] != 0:
+        i_end += 1
     while timeline[i_end][NEED_FAST_ALL_IDX] == 0:
-            i_end -= 1
-    while timeline[i_end+1][NEED_FAST_ALL_IDX] != 0:
-            i_end += 1
+        i_end -= 1
+
     return i_beg, i_end
-
-    len_timeline = len(timeline)
-    # if 'net' in parent:
-    #     i_beg = 300
-    #     while timeline[i_beg][NEED_FAST_ALL_IDX] != 0:
-    #         i_beg -= 1
-    #     i_end = 2000
-    #     while i_end < len_timeline and timeline[i_end][NEED_FAST_ALL_IDX] != 0:
-    #         i_end += 1
-    # else:
-    #     i_beg = 100
-    #     while i_beg > 0 and timeline[i_beg][NEED_FAST_ALL_IDX] != 0:
-    #         i_beg -= 1
-    #     while i_beg+1 < len_timeline and timeline[i_beg+1][ALLOC_ALL_IDX] == 0 and \
-    #             i_beg+2 < len_timeline and timeline[i_beg+2][ALLOC_ALL_IDX] == 0:
-    #         i_beg += 1
-    #     # 寻找范围末尾，认为需求量连续10个0，即为末尾
-    #     i_end = min(i_beg + 400, len_timeline)
-    #     while i_end < len_timeline:
-    #         if timeline[i_end][NEED_FAST_ALL_IDX] != 0:
-    #             i_end += 1
-    #             continue
-    #         all_zero = True
-    #         i_tmp = i_end
-    #         while i_tmp < len_timeline and i_tmp - i_end + 1 <= 10:
-    #             if timeline[i_tmp][NEED_FAST_ALL_IDX] != 0:
-    #                 all_zero = False
-    #                 break
-    #             i_tmp += 1
-    #         if all_zero:
-    #             break
-    #         i_end += 1
-
-    i_need_beg = -1
-    i_need_end = -1
-    i = i_beg
-    while i < i_end+3:
-        if i >= len_timeline:
-            break
-        if timeline[i][NEED_FAST_ALL_IDX] == 0:
-            i += 1
-            continue
-
-        i_tmp_beg = i
-        i_tmp_end = i
-        no_stop = 0
-        for j in range(i_tmp_beg+1, i_end+3):
-            if j >= len_timeline:
-                break
-            if timeline[j][NEED_FAST_ALL_IDX] == 0:
-                no_stop += 1
-                if no_stop == 50:
-                    break
-                continue
-            no_stop = 0
-            i_tmp_end = j
-
-        if i_need_beg == -1 or i_need_end - i_need_beg < i_tmp_end - i_tmp_beg:
-            i_need_beg = i_tmp_beg
-            i_need_end = i_tmp_end
-
-        i = i_tmp_end+1
-    return i_need_beg, i_need_end
 
 
 def find_alloc_range(timeline, parent):
@@ -683,6 +641,7 @@ def find_alloc_range(timeline, parent):
         i_cur += 1
     return i_beg, i_end
 
+
 def load_comp_ranges(parent):
     if os.path.exists(os.path.join(parent, '../comp_ranges.json')):
         with open(os.path.join(parent, '../comp_ranges.json'), 'r') as f:
@@ -693,16 +652,53 @@ def dump_comp_ranges(parent, data):
     with open(os.path.join(parent, '../comp_ranges.json'), 'w') as f:
         json.dump(data, f, indent=2)
 
-def find_comp_range(timeline, parent):
+def load_log_time_range(dir):
+    time_ranges = dict()
+    filenames = os.listdir(dir)
+    for filename in filenames:
+        name, ext = os.path.splitext(filename)
+        if name.find("log") != -1 or ext != ".txt":
+            continue
+
+        with open(os.path.join(dir, filename), "r") as f:
+            while True:
+                line = f.readline().strip()
+                if line is None or line == "":
+                    break
+
+                items = line.split(",")
+                if len(items) < 4:
+                    continue
+
+                if '.' in items[4]:
+                    msg_id = msg_id_dot2int(items[4])
+                else:
+                    msg_id = int(items[4])
+                if get_location(msg_id) > 2 or get_location(msg_id) == 0:
+                    continue
+                
+                time = int(items[3])
+                if time == -6795364578871345152:
+                    continue
+                assert time > 1600000000000000000, f'{dir}, {filename}, {items}'
+                
+                if msg_id not in time_ranges:
+                    time_ranges[msg_id] = [time, time]
+                else:
+                    time_range = time_ranges[msg_id]
+                    if time < time_range[0]:
+                        time_range[0] = time
+                    elif time > time_range[1]:
+                        time_range[1] = time
+    return time_ranges
+
+def get_time_range(parent):
     with lock:
         comp_ranges = load_comp_ranges(parent)
-    if parent in comp_ranges:
-        i_beg, i_end, _, _, beg_time, end_time, ana_time, _ = comp_ranges[parent]
-        if i_end == len(timeline) - 1:
-            print(parent, ' computing out of the monitoring range')
-        if ana_time < end_time:
-            print(parent, ' analysis time before the last log time')
-        return i_beg, i_end
+    mac_parent = get_mac_parent(parent)
+    if mac_parent in comp_ranges:
+        ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis, _ = comp_ranges[mac_parent]
+        return ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis
     
     log_dirpath = None
     for file in os.listdir(parent):
@@ -714,31 +710,41 @@ def find_comp_range(timeline, parent):
     if log_dirpath is None:
         print('Not found log dirpath')
         return []
-    msg_chains = load_logs_from_dir(log_dirpath, 0)  #type: list[list[(int, event_log)]]
+    msg_time_ranges = load_log_time_range(log_dirpath)
 
-    beg_time = -1
-    end_time = -1
-    ana_time = -1
-    for msg_id, logs in msg_chains:
+    ts_first_thing_send = -1
+    ts_last_thing_send = -1
+    ts_analysis = -1
+    ts_last_comp = -1
+    for msg_id, time_range in msg_time_ranges.items():
         if get_location(msg_id) > 2:  # invalid message id
             continue
-        if len(logs) < 1:  # 没有到 msg svr 发出
-            # print('Skip for length')
-            continue
         if check_noise(msg_id) or check_warm(msg_id):
-            # print(f'Skip for noise:{check_noise(msg_id)} warm:{check_warm(msg_id)}')
             continue
         if check_person(msg_id):
-            ana_time = logs[0].time
+            ts_analysis = time_range[0]
             continue
         
-        if beg_time == -1 or logs[0].time < beg_time:
-            beg_time = logs[0].time
-        if end_time == -1 or logs[len(logs)-1].time > end_time:
-            end_time = logs[len(logs)-1].time
+        if ts_first_thing_send == -1 or time_range[0] < ts_first_thing_send:
+            ts_first_thing_send = time_range[0]
+        if ts_last_thing_send == -1 or time_range[0] > ts_last_thing_send:
+            ts_last_thing_send = time_range[0]
+        if ts_last_comp == -1 or time_range[1] > ts_last_comp:
+            ts_last_comp = time_range[1]
     
-    s_beg_time = (beg_time//time_interval)%1000000
-    s_end_time = (end_time//time_interval)%1000000
+    with lock:
+        comp_ranges = load_comp_ranges(parent)
+        comp_ranges[mac_parent] = (ts_first_thing_send, ts_last_thing_send, 
+                                   ts_last_comp, ts_analysis, ts_last_comp < ts_analysis)
+        dump_comp_ranges(parent, comp_ranges)
+    return ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis
+
+
+def find_comp_range(timeline, parent):
+    ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis = get_time_range(parent)
+    
+    s_beg_time = (ts_first_thing_send//time_interval)%1000000
+    s_end_time = (ts_last_comp//time_interval)%1000000
     
     i_beg = 0
     while timeline[i_beg][0] < s_beg_time:
@@ -750,15 +756,10 @@ def find_comp_range(timeline, parent):
     
     if i_end == len(timeline) - 1:
         print(parent, ' computing out of the monitoring range')
-    if ana_time < end_time:
+    if ts_analysis < ts_last_comp:
         print(parent, ' analysis time before the last log time')
-    
-    with lock:
-        comp_ranges = load_comp_ranges(parent)
-        comp_ranges[parent] = (i_beg, i_end, len(timeline), i_end+1==len(timeline),
-                               beg_time, end_time, ana_time, ana_time<end_time)
-        dump_comp_ranges(parent, comp_ranges)
     return i_beg, i_end
+
 
 def get_all_need_usage_occupy_eff(timeline, i_beg, i_end, env='net'):
     if i_beg < 0:
@@ -1309,7 +1310,7 @@ if __name__ == "__main__":
     ])+'\n')
     entropy_file.close()
     
-    p = Pool(1)
+    p = Pool(16)
     res_li = []
     for parent in parents:
         # if '0429175153-' not in parent:

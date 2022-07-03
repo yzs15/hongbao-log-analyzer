@@ -45,19 +45,19 @@ def get_qos(total_id):
     return -1
 
 
-def check_net_6(logs: list[event_log]):
+def check_net_6(logs):
     if len(logs) != 6:
         return False
     return logs[5].logger.strip() == 'Wang'
 
 
-def check_net_8(logs: list[event_log]):
+def check_net_8(logs):
     if len(logs) != 8:
         return False
     return True
 
 
-def check_spb_14(logs: list[event_log]):
+def check_spb_14(logs):
     if len(logs) != 14:
         return False
     return True

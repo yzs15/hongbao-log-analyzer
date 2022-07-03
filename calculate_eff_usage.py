@@ -1,6 +1,6 @@
 import os
 from out_exec_time import check_noise, check_warm, check_net_6, check_net_8, check_spb_14
-from calculate_need import get_qos, get_location, net_exec_time
+from calculate_need import get_qos, get_location, net_exec_time, check_person
 from src.analyzer import event_log
 from src.analyzer_local import load_logs_from_dir
 
@@ -49,7 +49,7 @@ def calculate_eff_usage(parent, env, time_interval):
 
     timeline = {}
     for msg_id, logs in msg_chains:
-        if check_noise(msg_id) or check_warm(msg_id):
+        if check_noise(msg_id) or check_warm(msg_id) or check_person(msg_id):
             continue
         
         ts_start = -1
