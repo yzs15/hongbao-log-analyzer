@@ -246,6 +246,9 @@ def calculate_one(parent, entropy_filepath):
     suffix = hashlib.md5(mac_parent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
+    if env == 'spb':
+        out_filepath = os.path.join(
+            parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-2.csv")
     # if not os.path.exists(out_filepath):
     #     out_filepath = os.path.join(parent, f"{env}_naue_{time_interval//1000000}_thing_send.csv")
     if os.path.exists(out_filepath):  # 文件已经存在，直接读取
@@ -521,7 +524,9 @@ def build_str_entropy(timeline, parent):
 
     with lock:
         comp_ranges = load_comp_ranges(parent)
-    task_num = comp_ranges[get_mac_parent(parent)]
+    task_num = comp_ranges[get_mac_parent(parent)][5]
+    if task_num < float(no_task) * 0.625:
+        return None
 
     len_need_range = i_need_end - i_need_beg + 1
     len_alloc_range = i_alloc_end - i_alloc_beg + 1
@@ -1297,33 +1302,33 @@ if __name__ == "__main__":
     out_filepath = os.path.join(
         grandParent, f'an_ua_eu_en_entropy_v7-{suffix}.csv')
     entropy_file = open(out_filepath, 'w+')
-    entropy_file.write(','.join([
-        't_run', 'env', 'no_task', 'real_no_task', 'config', 'acc_speed', 'peak_task',
+    # entropy_file.write(','.join([
+    #     't_run', 'env', 'no_task', 'real_no_task', 'config', 'acc_speed', 'peak_task',
 
-        '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
-        '占用需求熵_need', '占用需求熵_p_need',
-        '使用率熵_need', '使用率熵_p_need',
-        '有效使用熵_need', '有效使用熵_p_need',
-        '有效需求熵_need', '有效需求熵_p_need',
+    #     '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
+    #     '占用需求熵_need', '占用需求熵_p_need',
+    #     '使用率熵_need', '使用率熵_p_need',
+    #     '有效使用熵_need', '有效使用熵_p_need',
+    #     '有效需求熵_need', '有效需求熵_p_need',
         
-        '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
-        '占用需求熵_alloc', '占用需求熵_p_alloc',
-        '使用率熵_alloc', '使用率熵_p_alloc',
-        '有效使用熵_alloc', '有效使用熵_p_alloc',
-        '有效需求熵_alloc', '有效需求熵_p_alloc',
+    #     '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
+    #     '占用需求熵_alloc', '占用需求熵_p_alloc',
+    #     '使用率熵_alloc', '使用率熵_p_alloc',
+    #     '有效使用熵_alloc', '有效使用熵_p_alloc',
+    #     '有效需求熵_alloc', '有效需求熵_p_alloc',
         
-        '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
-        '占用需求熵_comp', '占用需求熵_p_comp',
-        '使用率熵_comp', '使用率熵_p_comp',
-        '有效使用熵_comp', '有效使用熵_p_comp',
-        '有效需求熵_comp', '有效需求熵_p_comp',
+    #     '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
+    #     '占用需求熵_comp', '占用需求熵_p_comp',
+    #     '使用率熵_comp', '使用率熵_p_comp',
+    #     '有效使用熵_comp', '有效使用熵_p_comp',
+    #     '有效需求熵_comp', '有效需求熵_p_comp',
 
-        'yield', 'goodput',
-        'need_beg', 'need_len', 'alloc_len', 'comp_len'
-    ])+'\n')
+    #     'yield', 'goodput',
+    #     'need_beg', 'need_len', 'alloc_len', 'comp_len'
+    # ])+'\n')
     entropy_file.close()
     
-    p = Pool(2)
+    p = Pool(8)
     res_li = []
     for parent in parents:
         # if '0429175153-' not in parent:

@@ -73,10 +73,15 @@ def calculate_eff_usage(parent, env, time_interval):
             continue
         
         location = get_location(msg_id)
-        need_time = net_exec_time[location-1]
-        resp_time = ts_end - ts_start - 1
-
-        add2timeline(timeline, ts_start, resp_time, need_time/resp_time, location, time_interval)
+        if env == 'net':
+            need_time = net_exec_time[location-1]
+            resp_time = ts_end - ts_start - 1
+            add2timeline(timeline, ts_start, resp_time, need_time/resp_time, location, time_interval)
+        elif env == 'spb':
+            ts_valid_start = logs[8].time
+            ts_valid_end = logs[9].time
+            valid_time = ts_valid_end - ts_valid_start - 1
+            add2timeline(timeline, ts_valid_start, valid_time, 1, location, time_interval)
 
     timeline_list = list(timeline.items())
     timeline_list.sort(key=lambda x: x[0])
