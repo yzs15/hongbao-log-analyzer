@@ -192,7 +192,7 @@ def calculate_usage(env, parent, time_interval):
 
 def output_timeline(timeline, filepath):
     f = open(filepath, 'w+')
-    f.write('ts,need_fast_bj,need_fast_nj,need_fast_all,need_slow_bj,need_slow_nj,need_slow_all,alloc_bj,alloc_nj,alloc_all,usage_bj,usage_nj,usage_all,ratio\n')
+    f.write('ts,need_fast_bj,need_fast_nj,need_fast_all,need_slow_bj,need_slow_nj,need_slow_all,alloc_bj,alloc_nj,alloc_all,usage_bj,usage_nj,usage_all,eff_bj,eff_nj,eff_all\n')
     for rec in timeline:
         f.write(','.join(map(str, rec))+'\n')
     f.close()
@@ -519,11 +519,15 @@ def build_str_entropy(timeline, parent):
     if on_need + uo_need + eu_need == -3 and on_alloc + uo_alloc + eu_alloc == -3:
         return None
 
+    with lock:
+        comp_ranges = load_comp_ranges(parent)
+    task_num = comp_ranges[get_mac_parent(parent)]
+
     len_need_range = i_need_end - i_need_beg + 1
     len_alloc_range = i_alloc_end - i_alloc_beg + 1
     len_comp_range = i_comp_end - i_comp_beg + 1
     return ','.join(map(str, [
-        t_run, env, no_task, config, acc_speed, peak_task,
+        t_run, env, no_task, task_num, config, acc_speed, peak_task,
 
         on_need, uo_need, eu_need, en_need,
         an_S_need, an_log_S_need,
@@ -597,7 +601,7 @@ def find_need_range(timeline, parent):
     s_end_time = (ts_last_thing_send//time_interval)%1000000
     
     i_beg = 0
-    while timeline[i_beg][0] < s_beg_time:
+    while timeline[i_beg][0] != s_beg_time:
         i_beg += 1
     while i_beg-1 >= 0 and timeline[i_beg-1][NEED_FAST_ALL_IDX] != 0:
         i_beg -= 1
@@ -605,8 +609,10 @@ def find_need_range(timeline, parent):
         i_beg += 1
 
     i_end = i_beg
-    while i_end+1 < len(timeline) and timeline[i_end+1][0] <= s_end_time:
+    while i_end < len(timeline) and timeline[i_end][0] != s_end_time:
         i_end += 1
+    if i_end == len(timeline):
+        i_end -= 1
     while i_end+1 < len(timeline) and timeline[i_end+1][NEED_FAST_ALL_IDX] != 0:
         i_end += 1
     while timeline[i_end][NEED_FAST_ALL_IDX] == 0:
@@ -699,8 +705,8 @@ def get_time_range(parent):
     with lock:
         comp_ranges = load_comp_ranges(parent)
     mac_parent = get_mac_parent(parent)
-    if mac_parent in comp_ranges:
-        ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis, _ = comp_ranges[mac_parent]
+    if mac_parent in comp_ranges and len(comp_ranges[mac_parent]) == 6:
+        ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis, _, _ = comp_ranges[mac_parent]
         return ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis
     
     log_dirpath = None
@@ -715,6 +721,7 @@ def get_time_range(parent):
         return []
     msg_time_ranges = load_log_time_range(log_dirpath)
 
+    task_num = 0
     ts_first_thing_send = -1
     ts_last_thing_send = -1
     ts_analysis = -1
@@ -728,6 +735,7 @@ def get_time_range(parent):
             ts_analysis = time_range[0]
             continue
         
+        task_num += 1
         if ts_first_thing_send == -1 or time_range[0] < ts_first_thing_send:
             ts_first_thing_send = time_range[0]
         if ts_last_thing_send == -1 or time_range[0] > ts_last_thing_send:
@@ -738,7 +746,8 @@ def get_time_range(parent):
     with lock:
         comp_ranges = load_comp_ranges(parent)
         comp_ranges[mac_parent] = (ts_first_thing_send, ts_last_thing_send, 
-                                   ts_last_comp, ts_analysis, ts_last_comp < ts_analysis)
+                                   ts_last_comp, ts_analysis, ts_last_comp < ts_analysis,
+                                   task_num)
         dump_comp_ranges(parent, comp_ranges)
     return ts_first_thing_send, ts_last_thing_send, ts_last_comp, ts_analysis
 
@@ -750,14 +759,15 @@ def find_comp_range(timeline, parent):
     s_end_time = (ts_last_comp//time_interval)%1000000
     
     i_beg = 0
-    while timeline[i_beg][0] < s_beg_time:
+    while timeline[i_beg][0] != s_beg_time:
         i_beg += 1
         
     i_end = i_beg
-    while i_end+1 < len(timeline) and timeline[i_end+1][0] <= s_end_time:
+    while i_end < len(timeline) and timeline[i_end][0] != s_end_time:
         i_end += 1
     
-    if i_end == len(timeline) - 1:
+    if i_end == len(timeline):
+        i_end -= 1
         print(parent, ' computing out of the monitoring range')
     if ts_analysis < ts_last_comp:
         print(parent, ' analysis time before the last log time')
@@ -1288,7 +1298,7 @@ if __name__ == "__main__":
         grandParent, f'an_ua_eu_en_entropy_v7-{suffix}.csv')
     entropy_file = open(out_filepath, 'w+')
     entropy_file.write(','.join([
-        't_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task',
+        't_run', 'env', 'no_task', 'real_no_task', 'config', 'acc_speed', 'peak_task',
 
         '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
         '占用需求熵_need', '占用需求熵_p_need',
@@ -1313,7 +1323,7 @@ if __name__ == "__main__":
     ])+'\n')
     entropy_file.close()
     
-    p = Pool(16)
+    p = Pool(2)
     res_li = []
     for parent in parents:
         # if '0429175153-' not in parent:

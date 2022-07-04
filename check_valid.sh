@@ -1,7 +1,7 @@
 source venv/bin/activate
 
-FILE_NAME=an_ua_eu_en_entropy_v7
 DISK_PREFIX='/mnt/g'
+DISK_PREFIX='/Volumes/Elements'
 
 ROOTS=( \
 "logs-copy-vaild-burst" \
@@ -21,5 +21,6 @@ for root in ${ROOTS[@]}
 do
     root_dir="$DISK_PREFIX/$root"
     echo $root_dir
-    python3 check_time_valid.py $root_dir
+    # python3 check_time_valid.py $root_dir
+    python3 check_parent_valid.py $root_dir
 done

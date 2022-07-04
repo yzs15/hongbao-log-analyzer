@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import os
 
 FULL = (1 << 8) - 1
-TOTAL = 851840
+TOTAL = 640000
 
 
 class Analyzer:
