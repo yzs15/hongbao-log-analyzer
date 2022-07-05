@@ -43,7 +43,11 @@ time_interval = 100 * 1000 * 1000
 
 
 def get_mac_parent(parent):
-    return parent.replace('/mnt/g', '/Volumes/Elements')
+    ret = parent
+    ret = ret.replace('/Users/jian/logs', '/Volumes/Elements')
+    ret = ret.replace('/mnt/g', '/Volumes/Elements')
+    ret = ret.replace('/mnt/e/zsj/logs', '/Volumes/Elements')
+    return ret
 
 def get_k8s_req_lim(parent):
     grps = re.search(r'([0-9m]+)C(.*)C', parent)
@@ -246,13 +250,10 @@ def calculate_one(parent, entropy_filepath):
     suffix = hashlib.md5(mac_parent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
-    if env == 'spb':
-        out_filepath = os.path.join(
-            parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-2.csv")
-    # if not os.path.exists(out_filepath):
-    #     out_filepath = os.path.join(parent, f"{env}_naue_{time_interval//1000000}_thing_send.csv")
+    # if env == 'spb':
+    #     out_filepath = os.path.join(
+    #         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-2.csv")
     if os.path.exists(out_filepath):  # 文件已经存在，直接读取
-        # print(f'{out_filepath} already exists')
         timeline = []
         first_line = True
         with open(out_filepath, 'r') as f:
@@ -320,9 +321,6 @@ def calculate_one(parent, entropy_filepath):
                 i_eff += 1
             timeline.append(record)
             ts_cur = (ts_cur+1) % 1000000
-
-        out_filepath = os.path.join(
-            parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
         output_timeline(timeline, out_filepath)
 
     result = build_str_entropy(timeline, parent)
