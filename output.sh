@@ -3,10 +3,11 @@ source venv/bin/activate
 FILE_NAME=an_ua_eu_en_entropy_v7
 DISK_PREFIX='/mnt/g'
 DISK_PREFIX='/Volumes/Elements'
-DISK_PREFIX='/Users/jian/logs'
-DISK_PREFIX='/mnt/e/zsj/logs'
+# DISK_PREFIX='/Users/jian/logs'
+# DISK_PREFIX='/mnt/e/zsj/logs'
 
 ROOTS=( \
+"logs-june-7-5-valid-all" \
 "logs-june-6-29-valid-linear" \
 "logs-june-6-29-valid-burst" \
 "logs-june-7-1-valid-spb-linear" \
@@ -46,7 +47,9 @@ done
 
 # "logs-yuzishu-5-1-valid-spb-resort"
 resort_root_dir="$DISK_PREFIX/logs-yuzishu-5-1-valid-spb-resort"
-bash check_valid.sh $resort_root_dir
-rm -rf $resort_root_dir/$FILE_NAME*
-python3 calculate_need_usage_alloc.py  $resort_root_dir
-cat $resort_root_dir/$FILE_NAME* > $DISK_PREFIX/$FILE_NAME-resort.csv
+if [ -d $resort_root_dir ]; then
+    bash check_valid.sh $resort_root_dir
+    rm -rf $resort_root_dir/$FILE_NAME*
+    python3 calculate_need_usage_alloc.py  $resort_root_dir
+    cat $resort_root_dir/$FILE_NAME* > $DISK_PREFIX/$FILE_NAME-resort.csv
+fi

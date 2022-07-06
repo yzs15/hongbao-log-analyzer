@@ -22,7 +22,7 @@ root_dir=$1
 # do
     # root_dir="$DISK_PREFIX/$root"
     if ! [ -d $root_dir ]; then
-        continue
+        exit 0
     fi
     echo $root_dir
     # python3 check_time_valid.py $root_dir
@@ -41,7 +41,7 @@ root_dir=$1
         TS_CPU=$DIR_PATH"/ts-cpu"
         KS_CPU="${DIR_PATH}/k8s-cpu"
         
-        if ! [[ -e "$LOG_DIR/spb.jpg" || -e "$LOG_DIR/net.jpb" ]]; then
+        if ! [[ -e "$LOG_DIR/spb.jpg" || -e "$LOG_DIR/net.jpg" ]]; then
             mv $DIR_PATH "${DIR_PATH}not"
             continue
         fi

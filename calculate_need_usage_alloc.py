@@ -1326,7 +1326,7 @@ if __name__ == "__main__":
     # ])+'\n')
     entropy_file.close()
     
-    p = Pool(8)
+    p = Pool(2)
     res_li = []
     for parent in parents:
         # if '0429175153-' not in parent:
