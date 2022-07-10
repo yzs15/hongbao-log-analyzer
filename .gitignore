@@ -7,3 +7,5 @@ logs-20220307/
 logs-20220308/
 logs-20220309/
 logs-20220310/
+__pycache__/
+*.py[cod]

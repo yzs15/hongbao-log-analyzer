@@ -1,4 +1,3 @@
-import imp
 from multiprocessing import Pool, parent_process
 import sys
 import os
@@ -56,8 +55,8 @@ def recalculate_one(parent):
             # print(task_num, peak, ratio, type)
             print(log_path)
             # /Volumes/Elements/logs-yuzishu-4-17-valid-linear-no-noise-k8s-limit-exp3/0418014847-spb-76800-2-1
-            if not "0501205250-spb-320000" in log_path:
-                continue
+            # if not "0501205250-spb-320000" in log_path:
+            #     continue
             start(spb_config, log_path)
             
     
@@ -74,7 +73,8 @@ if __name__=="__main__":
         if "net" not in parent and "spb" not in parent:
             continue
         parents.append(path)
-    p = Pool(8)
+    
+    p = Pool(1)
     res_li = []
     for parent in parents:
         res = p.apply_async(recalculate_one, (parent,))

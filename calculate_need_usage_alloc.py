@@ -38,15 +38,18 @@ from src.k8s_cpu_utilization import list_total_cpu, compress_final_data
 from calculate_eff_usage import calculate_eff_usage
 from src.analyzer_local import load_logs_from_dir, msg_id_dot2int
 from src.analyzer import event_log
+from out_exec_time import check_net_6, check_net_8, check_spb_14, get_qos
+
 
 time_interval = 100 * 1000 * 1000
-
+lock = Lock()
 
 def get_mac_parent(parent):
     ret = parent
     ret = ret.replace('/Users/jian/logs', '/Volumes/Elements')
     ret = ret.replace('/mnt/g', '/Volumes/Elements')
     ret = ret.replace('/mnt/e/zsj/logs', '/Volumes/Elements')
+    ret = ret.replace('/mnt/e', '/Volumes/Elements')
     return ret
 
 def get_k8s_req_lim(parent):
@@ -215,6 +218,93 @@ def get_yield(parent):
     return -1
 
 
+def load_yld_machs(parent):
+    if os.path.exists(os.path.join(parent, '../yld_machs.json')):
+        with open(os.path.join(parent, '../yld_machs.json'), 'r') as f:
+            return json.load(f)
+    return {}
+
+def dump_yld_machs(parent, data):
+    with open(os.path.join(parent, '../yld_machs.json'), 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def get_msg_mach_yield(parent):
+    with lock:
+        yld_machs = load_yld_machs(parent)
+    mac_parent = get_mac_parent(parent)    
+    if mac_parent in yld_machs:
+        return yld_machs[mac_parent]
+
+    log_dirpath = None
+    for file in os.listdir(parent):
+        if not os.path.isdir(os.path.join(parent, file)):
+            continue
+        if file.startswith('2022'):
+            log_dirpath = os.path.join(parent, file)
+            break
+    if log_dirpath is None:
+        print(parent, 'Not found log dirpath')
+        return -1
+    msg_chains = load_logs_from_dir(log_dirpath, 0)
+
+    SPB_LEN = 14
+    SPB_START_IDX = 2
+    SPB_END_IDX = SPB_LEN - 4
+
+    # get average communication latency
+    comm_lat_total = 0
+    comm_lat_no = 0
+    for msg_id, logs in msg_chains:
+        if check_warm(msg_id) or check_person(msg_id) or check_noise(msg_id):
+            continue
+        if not check_spb_14(logs):
+            continue
+        
+        comp_in_bj = False
+        if logs[SPB_END_IDX].logger == "BJ-Machn-0" or \
+                logs[SPB_END_IDX].logger == "BJ-Machn-1":
+            comp_in_bj = True
+        if comp_in_bj:
+            continue
+
+        comm_lat = logs[SPB_END_IDX+1].time - logs[SPB_END_IDX].time
+        if comm_lat > 100 * 1000 * 1000:
+            continue
+        comm_lat_total += comm_lat
+        comm_lat_no += 1
+    comm_lat_ave = comm_lat_total / comm_lat_no
+
+    no_good = 0
+    no_task = 0
+    for msg_id, logs in msg_chains:
+        if check_warm(msg_id) or check_person(msg_id) or check_noise(msg_id):
+            continue
+        no_task += 1
+        if not check_spb_14(logs):
+            continue
+        
+        comp_in_bj = False
+        if logs[SPB_END_IDX].logger == "BJ-Machn-0" or \
+                logs[SPB_END_IDX].logger == "BJ-Machn-1":
+            comp_in_bj = True
+
+        duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
+        if comp_in_bj == 1:
+            duration += comm_lat_ave
+        
+        qos = get_qos(msg_id)
+        if duration < qos:
+            no_good += 1
+
+    yld = no_good / no_task
+    with lock:
+        yld_machs = load_yld_machs(parent)
+        yld_machs[mac_parent] = yld
+        dump_yld_machs(parent, yld_machs)
+    return yld
+
+
 def get_goodput(parent):
     for dir in os.listdir(parent):
         if not dir.startswith('2022'):
@@ -227,7 +317,7 @@ def get_goodput(parent):
             return sum(map(float, parts[7:]))
     return -1
 
-lock = Lock()
+
 def calculate_one(parent, entropy_filepath):
     if not os.path.isdir(parent):
         return 0
@@ -243,7 +333,7 @@ def calculate_one(parent, entropy_filepath):
         return 0
 
     if not os.path.exists(os.path.join(parent, 'k8s-cpu')) and not os.path.exists(os.path.join(parent, 'ts-cpu')):
-        print('Not found k8s-cpu or ts-cpu')
+        print(parent, 'Not found k8s-cpu or ts-cpu')
         return 0
     mac_parent = get_mac_parent(parent)
     print(mac_parent)
@@ -475,6 +565,10 @@ def build_str_entropy(timeline, parent):
     goodput = get_goodput(parent)
     if yld == -1 or goodput == -1:
         return None
+    
+    yld_mach = -1
+    if env == 'spb':
+        yld_mach = get_msg_mach_yield(parent)
 
     def cal_ratio(need, usage, occupy, eff_u):
         on, uo, eu, en = -1, -1, -1, -1
@@ -550,7 +644,7 @@ def build_str_entropy(timeline, parent):
         eu_S_comp, eu_log_S_comp, 
         en_S_comp, en_log_S_comp,
         
-        yld, goodput,
+        yld, yld_mach, goodput,
         i_need_beg, len_need_range, len_alloc_range, len_comp_range
     ]))
 
@@ -585,7 +679,7 @@ def build_str_an_ua_eu_with_var(timeline, parent):
         ua_alloc, ua_var_alloc,
         eu_alloc, eu_var_alloc,
         
-        yld, goodput,
+        yld, yld_mach, goodput,
         i_need_beg, i_need_end-i_need_beg+1, i_alloc_end-i_alloc_beg+1
     ]))
 
@@ -720,7 +814,7 @@ def get_time_range(parent):
             log_dirpath = os.path.join(parent, file)
             break
     if log_dirpath is None:
-        print('Not found log dirpath')
+        print(parent, 'Not found log dirpath')
         return []
     msg_time_ranges = load_log_time_range(log_dirpath)
 
@@ -1287,15 +1381,6 @@ def get_an_ua_eu_with_var(timeline, i_beg, i_end, span):
 if __name__ == "__main__":
     grandParent = sys.argv[1]
 
-    parents = []
-    for parent in os.listdir(grandParent):
-        path = os.path.join(grandParent, parent)
-        if not os.path.isdir(path):
-            continue
-        # if "spb" in parent:
-        #     continue
-        parents.append(path)
-
     suffix = hashlib.md5(grandParent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
         grandParent, f'an_ua_eu_en_entropy_v7-{suffix}.csv')
@@ -1321,13 +1406,23 @@ if __name__ == "__main__":
     #     '有效使用熵_comp', '有效使用熵_p_comp',
     #     '有效需求熵_comp', '有效需求熵_p_comp',
 
-    #     'yield', 'goodput',
+    #     'yield', 'yield_mach', 'goodput',
     #     'need_beg', 'need_len', 'alloc_len', 'comp_len'
     # ])+'\n')
     entropy_file.close()
     
-    p = Pool(2)
+    parents = []
+    for parent in os.listdir(grandParent):
+        path = os.path.join(grandParent, parent)
+        if not os.path.isdir(path):
+            continue
+        # if "spb" in parent:
+        #     continue
+        parents.append(path)
+        
+    p = Pool(8)
     res_li = []
+    parents.sort()
     for parent in parents:
         # if '0429175153-' not in parent:
         # if re.search(r'net-[0-9]+-50-1-', parent) is None and \

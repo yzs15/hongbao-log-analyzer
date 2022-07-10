@@ -410,7 +410,10 @@ def load_logs_from_dir(dir, last_time):
                 continue
             logs.append(sp)
         add_logs("server", logs, log_data, last_time)
-    return sort_logs(log_data)
+    for msg_id in log_data:
+        log_data[msg_id].sort(key=lambda x: x.time)
+    return log_data.items()
+    # return sort_logs(log_data)
 
 
 def sort_logs(log_data):

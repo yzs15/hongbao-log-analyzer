@@ -77,7 +77,7 @@ class Analyzer:
             save_proof_csv(prefix, proof, "src/net_base.png")
             draw_proof(prefix, proof, "src/net_base.png")
         elif self.env == "spb":
-            analyze_quality_spb_v2(log_data_sorted, proof, prefix)
+            analyze_quality_spb_v2_all(log_data_sorted, proof, prefix)
             analyze_path(log_data_sorted, proof)
             save_proof_csv(prefix, proof, "src/spb_base.png")
             draw_proof(prefix, proof, "src/spb_base.png")
@@ -819,7 +819,7 @@ def analyze_quality_spb_v2_all(log_data_sorted, proof, prefix):
     # proof.yield_100 = qos_good_100 / qos_100
     # proof.yield_50 = qos_good_50 / qos_50
     # proof.yield_20 = qos_good_20 / qos_20
-    all = max(total,  qos_100+qos_50+qos_20)
+    all = qos_100+qos_50+qos_20
     proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all 
