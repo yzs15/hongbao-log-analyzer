@@ -592,6 +592,7 @@ def build_str_entropy(timeline, parent):
         need_comp, usage_comp, occupy_comp, eff_comp)
     an_S_comp, an_log_S_comp, ua_S_comp, ua_log_S_comp, eu_S_comp, eu_log_S_comp, en_S_comp, en_log_S_comp = get_an_ua_eu_en_entropy_v7(
         timeline, i_comp_beg, i_comp_end, 1)
+    ave_usage_comp = get_ave_usage(timeline, i_comp_beg, i_comp_end)
 
     # 计算从发起需求到请求结束时间段的熵
     i_need_beg, i_need_end = find_need_range(timeline, parent)
@@ -601,6 +602,7 @@ def build_str_entropy(timeline, parent):
         need_need, usage_need, occupy_need, eff_need)
     an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need = get_an_ua_eu_en_entropy_v7(
         timeline, i_need_beg, i_need_end, 1)
+    ave_usage_need = get_ave_usage(timeline, i_need_beg, i_need_end)
 
     # 计算从发起请求到分配结束时间段的熵
     i_alloc_beg, i_alloc_end = find_alloc_range(timeline, parent)
@@ -610,6 +612,7 @@ def build_str_entropy(timeline, parent):
         need_alloc, usage_alloc, occupy_alloc, eff_alloc)
     an_S_alloc, an_log_S_alloc, ua_S_alloc, ua_log_S_alloc, eu_S_alloc, eu_log_S_alloc, en_S_alloc, en_log_S_alloc = get_an_ua_eu_en_entropy_v7(
         timeline, i_alloc_beg, i_alloc_end, 1)
+    ave_usage_alloc = get_ave_usage(timeline, i_alloc_beg, i_alloc_end)
 
     if on_need + uo_need + eu_need == -3 and on_alloc + uo_alloc + eu_alloc == -3:
         return None
@@ -618,6 +621,7 @@ def build_str_entropy(timeline, parent):
         comp_ranges = load_comp_ranges(parent)
     task_num = comp_ranges[get_mac_parent(parent)][5]
     if task_num < float(no_task) * 0.625:
+        print(parent, "real task is not enough")
         return None
 
     len_need_range = i_need_end - i_need_beg + 1
@@ -626,19 +630,19 @@ def build_str_entropy(timeline, parent):
     return ','.join(map(str, [
         t_run, env, no_task, task_num, config, acc_speed, peak_task,
 
-        on_need, uo_need, eu_need, en_need,
+        ave_usage_need, on_need, uo_need, eu_need, en_need,
         an_S_need, an_log_S_need,
         ua_S_need, ua_log_S_need,
         eu_S_need, eu_log_S_need, 
         en_S_need, en_log_S_need,
         
-        on_alloc, uo_alloc, eu_alloc, en_alloc,
+        ave_usage_alloc, on_alloc, uo_alloc, eu_alloc, en_alloc,
         an_S_alloc, an_log_S_alloc, 
         ua_S_alloc, ua_log_S_alloc, 
         eu_S_alloc, eu_log_S_alloc, 
         en_S_alloc, en_log_S_alloc,
         
-        on_comp, uo_comp, eu_comp, en_comp,
+        ave_usage_comp, on_comp, uo_comp, eu_comp, en_comp,
         an_S_comp, an_log_S_comp,
         ua_S_comp, ua_log_S_comp,
         eu_S_comp, eu_log_S_comp, 
@@ -679,7 +683,7 @@ def build_str_an_ua_eu_with_var(timeline, parent):
         ua_alloc, ua_var_alloc,
         eu_alloc, eu_var_alloc,
         
-        yld, yld_mach, goodput,
+        yld, goodput,
         i_need_beg, i_need_end-i_need_beg+1, i_alloc_end-i_alloc_beg+1
     ]))
 
@@ -1378,6 +1382,12 @@ def get_an_ua_eu_with_var(timeline, i_beg, i_end, span):
     return an, an_var, ua, ua_var, eu, eu_var
 
 
+def get_ave_usage(timeline, i_beg, i_end):
+    usage_total = 0
+    for i_cur in range(i_beg, i_end+1):
+        usage_total += timeline[i_cur][12]
+    return usage_total / (i_end-i_beg+1)
+
 if __name__ == "__main__":
     grandParent = sys.argv[1]
 
@@ -1388,19 +1398,19 @@ if __name__ == "__main__":
     # entropy_file.write(','.join([
     #     't_run', 'env', 'no_task', 'real_no_task', 'config', 'acc_speed', 'peak_task',
 
-    #     '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
+    #     '平均使用核数_need', '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
     #     '占用需求熵_need', '占用需求熵_p_need',
     #     '使用率熵_need', '使用率熵_p_need',
     #     '有效使用熵_need', '有效使用熵_p_need',
     #     '有效需求熵_need', '有效需求熵_p_need',
         
-    #     '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
+    #     '平均使用核数_alloc', '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
     #     '占用需求熵_alloc', '占用需求熵_p_alloc',
     #     '使用率熵_alloc', '使用率熵_p_alloc',
     #     '有效使用熵_alloc', '有效使用熵_p_alloc',
     #     '有效需求熵_alloc', '有效需求熵_p_alloc',
         
-    #     '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
+    #     '平均使用核数_comp', '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
     #     '占用需求熵_comp', '占用需求熵_p_comp',
     #     '使用率熵_comp', '使用率熵_p_comp',
     #     '有效使用熵_comp', '有效使用熵_p_comp',
@@ -1420,7 +1430,7 @@ if __name__ == "__main__":
         #     continue
         parents.append(path)
         
-    p = Pool(8)
+    p = Pool(6)
     res_li = []
     parents.sort()
     for parent in parents:

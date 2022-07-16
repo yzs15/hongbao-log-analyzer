@@ -2,8 +2,8 @@ from multiprocessing import Pool, parent_process
 import sys
 import os
 from fackmain import start
-net_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-net.json"
-spb_config = "/Users/jian/Workspace/Research/hongbao-log/configs/bjnj/log-spb.json"
+net_config = "configs/bjnj/log-net.json"
+spb_config = "configs/bjnj/log-spb.json"
 
 def recalculate_one(parent):
     is_net = False
@@ -58,26 +58,44 @@ def recalculate_one(parent):
             # if not "0501205250-spb-320000" in log_path:
             #     continue
             start(spb_config, log_path)
-            
-    
     return 0
+
+
+def recalculate_not_exist(parent):
+    log_dirpath = None
+    for file in os.listdir(parent):
+        if not os.path.isdir(os.path.join(parent, file)):
+            continue
+        if file.startswith('2022'):
+            log_dirpath = os.path.join(parent, file)
+            break
+    if log_dirpath is None:
+        print(parent, 'Not found log dirpath')
+        return 0
+    
+    if os.path.exists(os.path.join(log_dirpath, 'net.jpg')) or \
+        os.path.exists(os.path.join(log_dirpath, 'spb.jpg')):
+            return 0
+
+    recalculate_one(parent)
+    return 0
+
+
 if __name__=="__main__":
-    f = open("log", "w")
-    f.close()
     grandParent=sys.argv[1]
     parents = []
     for parent in os.listdir(grandParent):
         path = os.path.join(grandParent, parent)
         if not os.path.isdir(path):
             continue
-        if "net" not in parent and "spb" not in parent:
+        if 'not' in parent:
             continue
         parents.append(path)
     
-    p = Pool(1)
+    p = Pool(4)
     res_li = []
     for parent in parents:
-        res = p.apply_async(recalculate_one, (parent,))
+        res = p.apply_async(recalculate_not_exist, (parent,))
         res_li.append(res)
     for res in res_li:
         res.get()

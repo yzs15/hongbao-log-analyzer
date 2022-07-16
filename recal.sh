@@ -3,11 +3,8 @@ source venv/bin/activate
 FILE_NAME=an_ua_eu_en_entropy_v7
 DISK_PREFIXS=('/mnt/g' '/mnt/e')
 
-
 ROOTS=( \
-"logs-june-7-14-valid-all" \
-"logs-june-7-12-valid-noise-all" \
-"logs-june-7-13-valid-all" \
+"logs-june-7-8-valid-all" \
 "logs-june-7-5-valid-all" \
 "logs-june-6-29-valid-linear" \
 "logs-june-6-29-valid-burst" \
@@ -21,10 +18,9 @@ ROOTS=( \
 "logs-yuzishu-4-29-valid-acc-yield" \
 "logs-copy-vaild-burst" \
 "logs-yuzishu-5-4-k8s-peak-50-speed-1" \
-"logs-yuzishu-5-1-valid-spb-resort" \
 )
 
-# ROOTS=("logs-june-7-13-valid-all")
+ROOTS=("logs-june-7-10-valid-noise-all")
 
 for DISK_PREFIX in ${DISK_PREFIXS[@]}
 do
@@ -35,9 +31,6 @@ do
             continue
         fi
 
-        echo " "
-        echo $root_dir
-        echo "------------------"
-        python3 -u check_network_valid.py $root_dir
+        python3 recalculate.py $root_dir
     done
 done
