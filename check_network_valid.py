@@ -72,7 +72,7 @@ def check(parent):
                 err_msg = 'logs length equal to 5'
                 errs_file.write(','.join([err_msg_id, err_msg, ""])+'\n')
                 no_err += 1
-            if log_len > 5 and logs[5].time - logs[4].time > 10 * 1000 * 1000 * 1000:
+            if log_len > 5 and logs[5].time - logs[4].time > 3 * 1000 * 1000 * 1000:
                 comm_time = (logs[5].time - logs[4].time) / 1000000000.0
                 err_msg_id = msg_id_int2dot(msg_id)
                 err_msg = 'communication time greater than 10s'
@@ -108,7 +108,7 @@ def check(parent):
 if __name__=="__main__":
     grandParent = sys.argv[1]
     
-    p = Pool(2)
+    p = Pool(8)
     res_li = []
     
     parents = []
