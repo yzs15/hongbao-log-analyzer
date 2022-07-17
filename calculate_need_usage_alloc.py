@@ -50,6 +50,7 @@ def get_mac_parent(parent):
     ret = ret.replace('/mnt/g', '/Volumes/Elements')
     ret = ret.replace('/mnt/e/zsj/logs', '/Volumes/Elements')
     ret = ret.replace('/mnt/e', '/Volumes/Elements')
+    ret = ret.replace('/mnt/f', '/Volumes/Elements')
     return ret
 
 def get_k8s_req_lim(parent):
@@ -199,7 +200,7 @@ def calculate_usage(env, parent, time_interval):
 
 def output_timeline(timeline, filepath):
     f = open(filepath, 'w+')
-    f.write('ts,need_fast_bj,need_fast_nj,need_fast_all,need_slow_bj,need_slow_nj,need_slow_all,alloc_bj,alloc_nj,alloc_all,usage_bj,usage_nj,usage_all,eff_bj,eff_nj,eff_all\n')
+    f.write('ts,need_fast_bj,need_fast_nj,need_fast_all,need_slow_bj,need_slow_nj,need_slow_all,alloc_bj,alloc_nj,alloc_all,usage_bj,usage_nj,usage_all,eff_bj,eff_nj,eff_all,eff_ne_bj,eff_ne_nj,eff_ne_all\n')
     for rec in timeline:
         f.write(','.join(map(str, rec))+'\n')
     f.close()
@@ -332,7 +333,8 @@ def calculate_one(parent, entropy_filepath):
     if re.search(r'not$', parent) is not None:
         return 0
 
-    if not os.path.exists(os.path.join(parent, 'k8s-cpu')) and not os.path.exists(os.path.join(parent, 'ts-cpu')):
+    if not os.path.exists(os.path.join(parent, 'k8s-cpu')) and \
+        not os.path.exists(os.path.join(parent, 'ts-cpu')):
         print(parent, 'Not found k8s-cpu or ts-cpu')
         return 0
     mac_parent = get_mac_parent(parent)
@@ -340,9 +342,9 @@ def calculate_one(parent, entropy_filepath):
     suffix = hashlib.md5(mac_parent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
-    # if env == 'spb':
-    #     out_filepath = os.path.join(
-    #         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-2.csv")
+    if env == 'spb':
+        out_filepath = os.path.join(
+            parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-3.csv")
     if os.path.exists(out_filepath):  # 文件已经存在，直接读取
         timeline = []
         first_line = True
@@ -372,7 +374,7 @@ def calculate_one(parent, entropy_filepath):
             print('!!!! ', parent, 'no usage !!!!')
             return 0
 
-        eff_timeline = calculate_eff_usage(parent, env, time_interval)
+        eff_timeline, eff_ne_timeline = calculate_eff_usage(parent, env, time_interval)
         if len(eff_timeline) == 0:
             print('!!!! ', parent, "no effective usage !!!!")
             return 0
@@ -381,24 +383,34 @@ def calculate_one(parent, entropy_filepath):
         ts_beg_need, ts_end_need = need_timeline[0][0], need_timeline[need_len-1][0]
         ts_beg_au, ts_end_au = alloc_usage_timeline[0][0], alloc_usage_timeline[au_len-1][0]
         ts_beg_eff, ts_end_eff = eff_timeline[0][0], eff_timeline[eff_len-1][0]
-
+        if env == 'spb':
+            eff_ne_len = len(eff_ne_timeline)
+            ts_beg_eff_ne, ts_end_eff_ne = eff_ne_timeline[0][0], eff_ne_timeline[eff_ne_len-1][0]
+        
         ts_beg_need %= 1000000
         ts_end_need %= 1000000
         ts_beg_au %= 1000000
         ts_end_au %= 1000000
         ts_beg_eff %= 1000000
         ts_end_eff %= 1000000
+        if env == 'spb':
+            ts_beg_eff_ne %= 1000000
+            ts_end_eff_ne %= 1000000
 
         ts_first = min(ts_beg_need, ts_beg_au, ts_beg_eff)
         ts_last = max(ts_end_need, ts_end_au, ts_end_eff)
+        if env == 'spb':
+            ts_first = min(ts_first, ts_beg_eff_ne)
+            ts_last = min(ts_last, ts_end_eff_ne)
 
         i_need = 0
         i_au = 0
         i_eff = 0
+        i_eff_ne = 0
         timeline = []
         ts_cur = ts_first
         while ts_cur != ts_last+1:
-            record = [0] * 16
+            record = [0] * 19
             record[0] = ts_cur
             if i_need < need_len and need_timeline[i_need][0] % 1000000 == ts_cur:
                 record[1:7] = need_timeline[i_need][1:]
@@ -407,8 +419,12 @@ def calculate_one(parent, entropy_filepath):
                 record[7:13] = alloc_usage_timeline[i_au][1:]
                 i_au += 1
             if i_eff < eff_len and eff_timeline[i_eff][0] % 1000000 == ts_cur:
-                record[13:] = eff_timeline[i_eff][1:]
+                record[13:16] = eff_timeline[i_eff][1:]
                 i_eff += 1
+            if env == 'spb':
+                if i_eff_ne < eff_ne_len and eff_ne_timeline[i_eff_ne][0] % 1000000 == ts_cur:
+                    record[16:] = eff_ne_timeline[i_eff_ne][1:]
+                    i_eff_ne += 1
             timeline.append(record)
             ts_cur = (ts_cur+1) % 1000000
         output_timeline(timeline, out_filepath)
@@ -588,10 +604,12 @@ def build_str_entropy(timeline, parent):
         return None
     need_comp, usage_comp, occupy_comp, eff_comp = get_all_need_usage_occupy_eff(
         timeline, i_comp_beg, i_comp_end, env)
-    on_comp, uo_comp, eu_comp, en_comp = cal_ratio(
-        need_comp, usage_comp, occupy_comp, eff_comp)
-    an_S_comp, an_log_S_comp, ua_S_comp, ua_log_S_comp, eu_S_comp, eu_log_S_comp, en_S_comp, en_log_S_comp = get_an_ua_eu_en_entropy_v7(
-        timeline, i_comp_beg, i_comp_end, 1)
+    on_comp, uo_comp, eu_comp, en_comp = cal_ratio(need_comp, usage_comp, occupy_comp, eff_comp)
+    an_S_comp, an_log_S_comp, \
+        ua_S_comp, ua_log_S_comp, \
+        eu_S_comp, eu_log_S_comp, \
+        en_S_comp, en_log_S_comp, \
+        en_ne_S_comp, en_ne_log_S_comp = get_an_ua_eu_en_entropy_v7(timeline, i_comp_beg, i_comp_end, 1)
     ave_usage_comp = get_ave_usage(timeline, i_comp_beg, i_comp_end)
 
     # 计算从发起需求到请求结束时间段的熵
@@ -600,7 +618,7 @@ def build_str_entropy(timeline, parent):
         timeline, i_need_beg, i_need_end, env)
     on_need, uo_need, eu_need, en_need = cal_ratio(
         need_need, usage_need, occupy_need, eff_need)
-    an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need = get_an_ua_eu_en_entropy_v7(
+    an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need, en_ne_S_need, en_ne_log_S_need = get_an_ua_eu_en_entropy_v7(
         timeline, i_need_beg, i_need_end, 1)
     ave_usage_need = get_ave_usage(timeline, i_need_beg, i_need_end)
 
@@ -610,7 +628,7 @@ def build_str_entropy(timeline, parent):
         timeline, i_alloc_beg, i_alloc_end, env)
     on_alloc, uo_alloc, eu_alloc, en_alloc = cal_ratio(
         need_alloc, usage_alloc, occupy_alloc, eff_alloc)
-    an_S_alloc, an_log_S_alloc, ua_S_alloc, ua_log_S_alloc, eu_S_alloc, eu_log_S_alloc, en_S_alloc, en_log_S_alloc = get_an_ua_eu_en_entropy_v7(
+    an_S_alloc, an_log_S_alloc, ua_S_alloc, ua_log_S_alloc, eu_S_alloc, eu_log_S_alloc, en_S_alloc, en_log_S_alloc, en_ne_S_alloc, en_ne_log_S_alloc = get_an_ua_eu_en_entropy_v7(
         timeline, i_alloc_beg, i_alloc_end, 1)
     ave_usage_alloc = get_ave_usage(timeline, i_alloc_beg, i_alloc_end)
 
@@ -635,18 +653,21 @@ def build_str_entropy(timeline, parent):
         ua_S_need, ua_log_S_need,
         eu_S_need, eu_log_S_need, 
         en_S_need, en_log_S_need,
+        en_ne_S_need, en_ne_log_S_need,
         
         ave_usage_alloc, on_alloc, uo_alloc, eu_alloc, en_alloc,
         an_S_alloc, an_log_S_alloc, 
         ua_S_alloc, ua_log_S_alloc, 
         eu_S_alloc, eu_log_S_alloc, 
         en_S_alloc, en_log_S_alloc,
+        en_ne_S_alloc, en_ne_log_S_alloc,
         
         ave_usage_comp, on_comp, uo_comp, eu_comp, en_comp,
         an_S_comp, an_log_S_comp,
         ua_S_comp, ua_log_S_comp,
         eu_S_comp, eu_log_S_comp, 
         en_S_comp, en_log_S_comp,
+        en_ne_S_comp, en_ne_log_S_comp,
         
         yld, yld_mach, goodput,
         i_need_beg, len_need_range, len_alloc_range, len_comp_range
@@ -693,6 +714,7 @@ NEED_SLOW_ALL_IDX = 6
 ALLOC_ALL_IDX = 9
 USAGE_ALL_IDX = 12
 EFF_U_ALL_IDX = 15
+EFF_U_NE_ALL_IDX = 18
 
 
 def find_need_range(timeline, parent):
@@ -1152,12 +1174,16 @@ def get_an_ua_eu_en_entropy_v6(timeline, i_beg, i_end, span=1):
 # UA,EU: f(ui, ai) = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
 def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
     if i_beg < 0:
-        return -1, -1, -1, -1, -1, -1, -1, -1
+        return -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+
+    env = 'net' if len(timeline[0]) < EFF_U_NE_ALL_IDX else 'spb'
 
     an_items = {}
     ua_items = {}
     eu_items = {}
     en_items = {}
+    eu_ne_items = {}
+    en_ne_items = {}
 
     def add_dict(items, item):
         if item not in items:
@@ -1172,6 +1198,7 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
         usage_item = 0
         alloc_item = 0
         eff_item = 0
+        eff_ne_item = 0
         while i_cur <= i_end and cnt < span:
             unit = timeline[i_cur]
             need_all = unit[NEED_FAST_ALL_IDX]
@@ -1187,6 +1214,10 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
             eff_all = unit[EFF_U_ALL_IDX]
             eff_item += eff_all
             
+            if env == 'spb':
+                eff_ne_all = unit[EFF_U_NE_ALL_IDX]
+                eff_ne_item += eff_ne_all
+
             i_cur += 1
             cnt += 1
         
@@ -1201,6 +1232,13 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
         
         en_ratio = min(100, int(eff_item/need_item * 100 + 0.5)) if need_item > 0 else 100
         add_dict(en_items, en_ratio/100.)
+        
+        if env == 'spb':
+            eu_ne_ratio = min(100, int(eff_ne_item/usage_item * 100 + 0.5)) if usage_item > 0 else 100
+            add_dict(eu_ne_items, eu_ne_ratio/100.)
+            
+            en_ne_ratio = min(100, int(eff_ne_item/need_item * 100 + 0.5)) if need_item > 0 else 100
+            add_dict(en_ne_items, en_ne_ratio/100.)
     
     def cal_ai(items:dict, total, ui):
         ai = 0
@@ -1256,8 +1294,12 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
     ua_S, ua_log_S = cal_entropy_ua_eu(ua_items)
     eu_S, eu_log_S = cal_entropy_ua_eu(eu_items)
     # en_S, en_log_S = cal_entropy(en_items)
+    if env == 'spb':
+        eu_ne_S, eu_ne_log_S = cal_entropy_ua_eu(eu_ne_items)
+    else:
+        eu_ne_S, eu_ne_log_S = -1, -1
 
-    return an_S, an_log_S, ua_S, ua_log_S, eu_S, eu_log_S, 999, 999
+    return an_S, an_log_S, ua_S, ua_log_S, eu_S, eu_log_S, 999, 999, eu_ne_S, eu_ne_log_S
 
 
 def get_un(timeline, i_beg, i_end, env='net'):
@@ -1382,6 +1424,13 @@ def get_an_ua_eu_with_var(timeline, i_beg, i_end, span):
     return an, an_var, ua, ua_var, eu, eu_var
 
 
+def calculate_wrapper(parent, out_filepath):
+    try:
+        return calculate_one(parent, out_filepath)
+    except Exception as e:
+        print('!!!! error: ', parent, e)
+        return 0
+
 def get_ave_usage(timeline, i_beg, i_end):
     usage_total = 0
     for i_cur in range(i_beg, i_end+1):
@@ -1439,7 +1488,9 @@ if __name__ == "__main__":
         # if re.search(r'net-[0-9]+-50-1-', parent) is None and \
         #    re.search(r'spb-[0-9]+-50-1', parent) is None:
         # continue
-        res = p.apply_async(calculate_one, (parent, out_filepath))
+        if '0701202633-spb-115200-90-1000' not in parent:
+            continue
+        res = p.apply_async(calculate_wrapper, (parent, out_filepath))
         res_li.append(res)
     
     for res in res_li:

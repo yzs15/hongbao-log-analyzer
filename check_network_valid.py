@@ -30,7 +30,7 @@ def next_msg(log_fd):
         if line == '':
             continue
         if '----' in line:
-            break
+            yield message_id, logs
         
         if 'Message ID' in line:
             message_id = int(re.search('\(([0-9]+)\)', line).group(1))
@@ -45,7 +45,7 @@ def next_msg(log_fd):
             ts = ts_ns + ts_us * 1000 + ts_ms * 1000000 + ts_sec * 1000000000 \
                  + ts_pre * 1000000000000
             logs.append(ts)
-    return message_id, logs
+    # return message_id, logs
 
 lock = Lock()
 def check(parent):
@@ -85,8 +85,8 @@ def check(parent):
 
     no_err = 0
     log_fd = open(os.path.join(log_dirpath, 'log.txt'), 'r')
-    while True:
-        msg_id, logs = next_msg(log_fd)
+    for msg_id, logs in next_msg(log_fd):
+        # msg_id, logs = next_msg(log_fd)
         if msg_id == 0:
             break
         if check_noise(msg_id) or check_warm(msg_id) or check_person(msg_id):
@@ -142,7 +142,7 @@ def check(parent):
 if __name__=="__main__":
     grandParent = sys.argv[1]
     
-    p = Pool(8)
+    p = Pool(16)
     res_li = []
     
     parents = []
@@ -155,6 +155,7 @@ if __name__=="__main__":
         parents.append(path)
     
     parents.sort()
+    # parents.reverse()
     for parent in parents:
         # if 'spb' not in parent:
         #     continue

@@ -3,7 +3,6 @@ import os
 import sys
 
 def check(parent):
-    print('====> ', parent)
     log_dirpath = None
     for file in os.listdir(parent):
         if not os.path.isdir(os.path.join(parent, file)):
@@ -28,6 +27,7 @@ def check(parent):
     if os.path.exists(os.path.join(parent, 'k8s-cpu')):
         return 0
 
+    print('====> ', parent)
     if not os.path.exists(os.path.join(parent, 'ts_cpu_alloc_100ms.csv')):
         os.system(f'python3 ./src/ts_cpu_alloc.py {log_dirpath}')
     if not os.path.exists(os.path.join(parent, 'ts_cpu_usage_100ms.csv')):
