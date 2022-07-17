@@ -62,7 +62,6 @@ def next_msg(que, lock, parent):
                  + ts_pre * 1000000000000
             logs.append(ts)
     que.put([0, []])
-    que.close()
     return 0
 
 
