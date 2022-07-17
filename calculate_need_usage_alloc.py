@@ -1426,6 +1426,19 @@ def get_an_ua_eu_with_var(timeline, i_beg, i_end, span):
 
 def calculate_wrapper(parent, out_filepath):
     try:
+        log_dirpath = None
+        for file in os.listdir(parent):
+            if not os.path.isdir(os.path.join(parent, file)):
+                continue
+            if file.startswith('2022'):
+                log_dirpath = os.path.join(parent, file)
+                break
+        if log_dirpath is None:
+            print(parent, 'Not found log dirpath')
+            return 0
+        if not os.path.exists(os.path.join(log_dirpath, 'spb.jpg')) and \
+            not os.path.exists(os.path.join(log_dirpath, 'net.jpg')):
+                return 0
         return calculate_one(parent, out_filepath)
     except Exception as e:
         print('!!!! error: ', parent, e)
@@ -1479,7 +1492,7 @@ if __name__ == "__main__":
         #     continue
         parents.append(path)
         
-    p = Pool(4)
+    p = Pool(2)
     res_li = []
     parents.sort()
     # parents.reverse()
@@ -1488,8 +1501,6 @@ if __name__ == "__main__":
         # if re.search(r'net-[0-9]+-50-1-', parent) is None and \
         #    re.search(r'spb-[0-9]+-50-1', parent) is None:
         # continue
-        if '0701202633-spb-115200-90-1000' not in parent:
-            continue
         res = p.apply_async(calculate_wrapper, (parent, out_filepath))
         res_li.append(res)
     

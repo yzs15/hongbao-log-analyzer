@@ -37,9 +37,9 @@ do
             continue
         fi
 
-        echo " "
-        echo $root_dir
-        echo "------------------"
+        # echo " "
+        # echo $root_dir
+        # echo "------------------"
         python3 -u check_network_valid.py $root_dir
     done
 done
