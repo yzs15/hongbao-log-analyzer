@@ -1,7 +1,7 @@
 source venv/bin/activate
 
 FILE_NAME=an_ua_eu_en_entropy_v7
-DISK_PREFIXS=('/mnt/g' '/mnt/e' '/mnt/f')
+DISK_PREFIXS=('/mnt/f' '/mnt/g' '/mnt/e')
 
 ROOTS=( \
 "logs-june-7-16-valid-bu" \

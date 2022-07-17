@@ -2,6 +2,7 @@ from multiprocessing import Pool, parent_process
 import sys
 import os
 from fackmain import start
+
 net_config = "configs/bjnj/log-net.json"
 spb_config = "configs/bjnj/log-spb.json"
 
@@ -92,9 +93,10 @@ if __name__=="__main__":
             continue
         parents.append(path)
     
-    p = Pool(2)
+    p = Pool(4)
     res_li = []
     parents.sort()
+    # parents.reverse()
     for parent in parents:
         res = p.apply_async(recalculate_not_exist, (parent,))
         res_li.append(res)

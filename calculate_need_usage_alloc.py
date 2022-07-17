@@ -1430,9 +1430,10 @@ if __name__ == "__main__":
         #     continue
         parents.append(path)
         
-    p = Pool(6)
+    p = Pool(4)
     res_li = []
     parents.sort()
+    # parents.reverse()
     for parent in parents:
         # if '0429175153-' not in parent:
         # if re.search(r'net-[0-9]+-50-1-', parent) is None and \
