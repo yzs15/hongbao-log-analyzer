@@ -92,8 +92,9 @@ if __name__=="__main__":
             continue
         parents.append(path)
     
-    p = Pool(4)
+    p = Pool(2)
     res_li = []
+    parents.sort()
     for parent in parents:
         res = p.apply_async(recalculate_not_exist, (parent,))
         res_li.append(res)

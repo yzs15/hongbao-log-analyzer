@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from calculate_need import check_noise, check_warm, get_location, check_person
 from src.analyzer_local import load_logs_from_dir, msg_id_dot2int, msg_id_int2dot
@@ -16,6 +17,35 @@ def load_net_valid(parent):
 def dump_net_valid(parent, data):
     with open(os.path.join(parent, '../../net_valid_rets.json'), 'w') as f:
         json.dump(data, f, indent=2)
+
+def next_msg(log_fd):
+    message_id = 0
+    logs = []
+    while True:
+        line = log_fd.readline()
+        if line == '':
+            break
+        
+        line = line.strip()
+        if line == '':
+            continue
+        if '----' in line:
+            break
+        
+        if 'Message ID' in line:
+            message_id = int(re.search('\(([0-9]+)\)', line).group(1))
+        elif 'SEND' in line or 'RECV' in line:
+            assert message_id > 0
+            ts_matchs = re.search(r'\[\((\d+)\)(\d+) s (\d+) ms (\d+) us (\d+) ns\]', line)
+            ts_pre = int(ts_matchs.group(1))
+            ts_sec = int(ts_matchs.group(2))
+            ts_ms = int(ts_matchs.group(3))
+            ts_us = int(ts_matchs.group(4))
+            ts_ns = int(ts_matchs.group(5))
+            ts = ts_ns + ts_us * 1000 + ts_ms * 1000000 + ts_sec * 1000000000 \
+                 + ts_pre * 1000000000000
+            logs.append(ts)
+    return message_id, logs
 
 lock = Lock()
 def check(parent):
@@ -54,8 +84,11 @@ def check(parent):
     errs_file = open(os.path.join(parent, f'network_errs-{suffix}.csv'), 'w')
 
     no_err = 0
-    msg_chains = load_logs_from_dir(log_dirpath, 0)
-    for msg_id, logs in msg_chains:
+    log_fd = open(os.path.join(log_dirpath, 'log.txt'), 'r')
+    while True:
+        msg_id, logs = next_msg(log_fd)
+        if msg_id == 0:
+            break
         if check_noise(msg_id) or check_warm(msg_id) or check_person(msg_id):
             continue
         
@@ -67,13 +100,13 @@ def check(parent):
         if env == 'net':
             if log_len < 5:
                 continue
-            if log_len == 5 and ts_analysis - logs[4].time > 50 * 1000 * 1000:
+            if log_len == 5 and ts_analysis - logs[4] > 50 * 1000 * 1000:
                 err_msg_id = msg_id_int2dot(msg_id)
                 err_msg = 'logs length equal to 5'
                 errs_file.write(','.join([err_msg_id, err_msg, ""])+'\n')
                 no_err += 1
-            if log_len > 5 and logs[5].time - logs[4].time > 3 * 1000 * 1000 * 1000:
-                comm_time = (logs[5].time - logs[4].time) / 1000000000.0
+            if log_len > 5 and logs[5] - logs[4] > 3 * 1000 * 1000 * 1000:
+                comm_time = (logs[5] - logs[4]) / 1000000000.0
                 err_msg_id = msg_id_int2dot(msg_id)
                 err_msg = 'communication time greater than 10s'
                 errs_file.write(','.join([err_msg_id, err_msg, str(comm_time)])+'\n')
@@ -81,17 +114,18 @@ def check(parent):
         else:
             if log_len < 11:
                 continue
-            if log_len == 11 and ts_analysis - logs[10].time > 50 * 1000 * 1000:
+            if log_len == 11 and ts_analysis - logs[10] > 50 * 1000 * 1000:
                 err_msg_id = msg_id_int2dot(msg_id)
                 err_msg = 'logs length equal to 11'
                 errs_file.write(','.join([err_msg_id, err_msg, ""])+'\n')
                 no_err += 1
-            if log_len > 11 and logs[11].time - logs[10].time > 10 * 1000 * 1000 * 1000:
-                comm_time = (logs[5].time - logs[4].time) / 1000000000.0
+            if log_len > 11 and logs[11] - logs[10] > 3 * 1000 * 1000 * 1000:
+                comm_time = (logs[5] - logs[4]) / 1000000000.0
                 err_msg_id = msg_id_int2dot(msg_id)
                 err_msg = 'communication time greater than 10s'
                 errs_file.write(','.join([err_msg_id, err_msg, str(comm_time)])+'\n')
                 no_err += 1
+    log_fd.close()
     errs_file.close()
     
     valid = no_err == 0

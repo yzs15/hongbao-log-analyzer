@@ -1,9 +1,10 @@
 source venv/bin/activate
 
 FILE_NAME=an_ua_eu_en_entropy_v7
-DISK_PREFIXS=('/mnt/g' '/mnt/e')
+DISK_PREFIXS=('/mnt/g' '/mnt/e' '/mnt/f')
 
 ROOTS=( \
+"logs-june-7-16-valid-bu" \
 "logs-june-7-14-valid-all" \
 "logs-june-7-13-valid-all" \
 "logs-june-7-8-valid-all" \
@@ -52,10 +53,11 @@ do
             continue
         fi
 
-        python3 recalculate.py $root_dir
+        # python3 recalculate.py $root_dir
 
         # check which directories are valid
-        bash check_valid.sh $root_dir
+        # bash check_valid.sh $root_dir
+        python3 check_log_valid.py $root_dir
         # python3 check_parent_valid.py $root_dir
     done
 done
