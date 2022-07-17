@@ -30,15 +30,9 @@ def next_msg(que, lock, parent):
         if file.startswith('2022'):
             log_dirpath = os.path.join(parent, file)
             break
-    if log_dirpath is None:
-        print(parent, 'Not found log dirpath')
-        que.put([0, []])
-        return 0
-    if not os.path.exists(os.path.join(log_dirpath, 'log.txt')):
-        que.put([0, []])
-        return 0
     log_fd = open(os.path.join(log_dirpath, 'log.txt'), 'r')
     
+    print(os.getpid(), '====>', parent)
     message_id = 0
     logs = []
     while True:
@@ -51,6 +45,8 @@ def next_msg(que, lock, parent):
             continue
         if '----' in line:
             que.put([message_id, logs])
+            message_id = 0
+            logs = []
         
         if 'Message ID' in line:
             message_id = int(re.search('\(([0-9]+)\)', line).group(1))
@@ -70,12 +66,12 @@ def next_msg(que, lock, parent):
     return 0
 
 
-def skip(parent, lock, mac_parent):
+def skip(parent, lock, mac_parent, to_print=False):
     with lock:
         net_valids = load_net_valid(parent)
     if mac_parent in net_valids:
         valid, no_err = net_valids[mac_parent]
-        if valid == False:
+        if valid == False and to_print:
             print(parent, no_err)
         return True
 
@@ -83,12 +79,26 @@ def skip(parent, lock, mac_parent):
         comp_ranges = load_comp_ranges(parent)
     if mac_parent not in comp_ranges:
         return True
+    
+    log_dirpath = None
+    for file in os.listdir(parent):
+        if not os.path.isdir(os.path.join(parent, file)):
+            continue
+        if file.startswith('2022'):
+            log_dirpath = os.path.join(parent, file)
+            break
+    if log_dirpath is None:
+        return True
+    if not os.path.exists(os.path.join(log_dirpath, 'log.txt')):
+        return True
+
     return False
     
 def check(que, lock, parent):
     mac_parent = get_mac_parent(parent)
-    if skip(parent, lock, mac_parent):
+    if skip(parent, lock, mac_parent, True):
         return 0
+    print(os.getpid(), '====>', parent)
     
     if 'net' in parent:
         env = 'net'
@@ -107,7 +117,6 @@ def check(que, lock, parent):
     no_err = 0
     while True:
         msg_id, logs = que.get()
-        print(msg_id, logs)
         if msg_id == 0:
             break
         if check_noise(msg_id) or check_warm(msg_id) or check_person(msg_id):
@@ -161,7 +170,7 @@ def check(que, lock, parent):
 if __name__=="__main__":
     grandParent = sys.argv[1]
     
-    p = Pool(16)
+    p = Pool(8)
     res_li = []
     
     parents = []
@@ -177,6 +186,7 @@ if __name__=="__main__":
     # parents.reverse()
     ma = Manager()
     lock = ma.Lock()
+    ms, ques = [], []
     for parent in parents:
         m = Manager()
         que = m.Queue()
@@ -184,13 +194,8 @@ if __name__=="__main__":
         res_li.append(res)
         res = p.apply_async(check, (que, lock, parent,))
         res_li.append(res)
-        
-        # p1 = Process(target=next_msg, args=(que,parent,))
-        # p2 = Process(target=check, args=(que,parent,))
-        # p1.start()
-        # p2.start()
-        # p1.join()
-        # p2.join()
+        ms.append(m)
+        ques.append(que)
         
     for res in res_li:
         s = res.get()

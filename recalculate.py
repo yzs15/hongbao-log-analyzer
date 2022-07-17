@@ -78,6 +78,7 @@ def recalculate_not_exist(parent):
         os.path.exists(os.path.join(log_dirpath, 'spb.jpg')):
             return 0
 
+    print(os.getpid(), '====>', parent)
     recalculate_one(parent)
     return 0
 
@@ -93,7 +94,7 @@ if __name__=="__main__":
             continue
         parents.append(path)
     
-    p = Pool(4)
+    p = Pool(2)
     res_li = []
     parents.sort()
     # parents.reverse()

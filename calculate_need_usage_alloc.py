@@ -344,7 +344,7 @@ def calculate_one(parent, entropy_filepath):
         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
     if env == 'spb':
         out_filepath = os.path.join(
-            parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-3.csv")
+            parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-5.csv")
     if os.path.exists(out_filepath):  # 文件已经存在，直接读取
         timeline = []
         first_line = True
@@ -401,7 +401,7 @@ def calculate_one(parent, entropy_filepath):
         ts_last = max(ts_end_need, ts_end_au, ts_end_eff)
         if env == 'spb':
             ts_first = min(ts_first, ts_beg_eff_ne)
-            ts_last = min(ts_last, ts_end_eff_ne)
+            ts_last = max(ts_last, ts_end_eff_ne)
 
         i_need = 0
         i_au = 0
@@ -586,8 +586,8 @@ def build_str_entropy(timeline, parent):
     if env == 'spb':
         yld_mach = get_msg_mach_yield(parent)
 
-    def cal_ratio(need, usage, occupy, eff_u):
-        on, uo, eu, en = -1, -1, -1, -1
+    def cal_ratio(need, usage, occupy, eff_u, eff_u_ne):
+        on, uo, eu, en, eu_ne, en_ne = -1, -1, -1, -1, -1, -1
         if need > 0:
             on = occupy / need
             en = eff_u / need
@@ -595,41 +595,53 @@ def build_str_entropy(timeline, parent):
             uo = usage / occupy
         if usage > 0:
             eu = eff_u / usage
-        return on, uo, eu, en
+        if eff_u_ne != -1 and need > 0:
+            en_ne = eff_u_ne / need
+        if eff_u_ne != -1 and usage > 0:
+            eu_ne = eff_u_ne / usage
+            
+        return on, uo, eu, en, en_ne, eu_ne
 
     # 计算从发起需求到计算结束时间段的熵
     i_comp_beg, i_comp_end = find_comp_range(timeline, parent)
     if i_comp_beg == -1 or i_comp_end == -1:
         print(f'{parent} log not long enough')
         return None
-    need_comp, usage_comp, occupy_comp, eff_comp = get_all_need_usage_occupy_eff(
-        timeline, i_comp_beg, i_comp_end, env)
-    on_comp, uo_comp, eu_comp, en_comp = cal_ratio(need_comp, usage_comp, occupy_comp, eff_comp)
+    need_comp, usage_comp, occupy_comp, eff_comp, eff_ne_comp = \
+        get_all_need_usage_occupy_eff(timeline, i_comp_beg, i_comp_end, env)
+    on_comp, uo_comp, eu_comp, en_comp, en_ne_comp, eu_ne_comp = \
+        cal_ratio(need_comp, usage_comp, occupy_comp, eff_comp, eff_ne_comp)
     an_S_comp, an_log_S_comp, \
         ua_S_comp, ua_log_S_comp, \
         eu_S_comp, eu_log_S_comp, \
         en_S_comp, en_log_S_comp, \
-        en_ne_S_comp, en_ne_log_S_comp = get_an_ua_eu_en_entropy_v7(timeline, i_comp_beg, i_comp_end, 1)
+        en_ne_S_comp, en_ne_log_S_comp = get_an_ua_eu_en_entropy_v7(timeline, i_comp_beg, i_comp_end, 1, env)
     ave_usage_comp = get_ave_usage(timeline, i_comp_beg, i_comp_end)
 
     # 计算从发起需求到请求结束时间段的熵
     i_need_beg, i_need_end = find_need_range(timeline, parent)
-    need_need, usage_need, occupy_need, eff_need = get_all_need_usage_occupy_eff(
-        timeline, i_need_beg, i_need_end, env)
-    on_need, uo_need, eu_need, en_need = cal_ratio(
-        need_need, usage_need, occupy_need, eff_need)
-    an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need, en_ne_S_need, en_ne_log_S_need = get_an_ua_eu_en_entropy_v7(
-        timeline, i_need_beg, i_need_end, 1)
+    need_need, usage_need, occupy_need, eff_need, eff_ne_need = \
+        get_all_need_usage_occupy_eff(timeline, i_need_beg, i_need_end, env)
+    on_need, uo_need, eu_need, en_need, en_ne_need, eu_ne_need = \
+        cal_ratio(need_need, usage_need, occupy_need, eff_need, eff_ne_need)
+    an_S_need, an_log_S_need, \
+        ua_S_need, ua_log_S_need, \
+        eu_S_need, eu_log_S_need, \
+        en_S_need, en_log_S_need, \
+        en_ne_S_need, en_ne_log_S_need = get_an_ua_eu_en_entropy_v7(timeline, i_need_beg, i_need_end, 1, env)
     ave_usage_need = get_ave_usage(timeline, i_need_beg, i_need_end)
 
     # 计算从发起请求到分配结束时间段的熵
     i_alloc_beg, i_alloc_end = find_alloc_range(timeline, parent)
-    need_alloc, usage_alloc, occupy_alloc, eff_alloc = get_all_need_usage_occupy_eff(
-        timeline, i_alloc_beg, i_alloc_end, env)
-    on_alloc, uo_alloc, eu_alloc, en_alloc = cal_ratio(
-        need_alloc, usage_alloc, occupy_alloc, eff_alloc)
-    an_S_alloc, an_log_S_alloc, ua_S_alloc, ua_log_S_alloc, eu_S_alloc, eu_log_S_alloc, en_S_alloc, en_log_S_alloc, en_ne_S_alloc, en_ne_log_S_alloc = get_an_ua_eu_en_entropy_v7(
-        timeline, i_alloc_beg, i_alloc_end, 1)
+    need_alloc, usage_alloc, occupy_alloc, eff_alloc, eff_ne_alloc = \
+        get_all_need_usage_occupy_eff(timeline, i_alloc_beg, i_alloc_end, env)
+    on_alloc, uo_alloc, eu_alloc, en_alloc, en_ne_alloc, eu_ne_alloc = \
+        cal_ratio(need_alloc, usage_alloc, occupy_alloc, eff_alloc, eff_ne_alloc)
+    an_S_alloc, an_log_S_alloc, \
+        ua_S_alloc, ua_log_S_alloc, \
+        eu_S_alloc, eu_log_S_alloc, \
+        en_S_alloc, en_log_S_alloc, \
+        en_ne_S_alloc, en_ne_log_S_alloc = get_an_ua_eu_en_entropy_v7(timeline, i_alloc_beg, i_alloc_end, 1, env)
     ave_usage_alloc = get_ave_usage(timeline, i_alloc_beg, i_alloc_end)
 
     if on_need + uo_need + eu_need == -3 and on_alloc + uo_alloc + eu_alloc == -3:
@@ -648,21 +660,21 @@ def build_str_entropy(timeline, parent):
     return ','.join(map(str, [
         t_run, env, no_task, task_num, config, acc_speed, peak_task,
 
-        ave_usage_need, on_need, uo_need, eu_need, en_need,
+        ave_usage_need, on_need, uo_need, eu_need, en_need, en_ne_need, eu_ne_need,
         an_S_need, an_log_S_need,
         ua_S_need, ua_log_S_need,
         eu_S_need, eu_log_S_need, 
         en_S_need, en_log_S_need,
         en_ne_S_need, en_ne_log_S_need,
         
-        ave_usage_alloc, on_alloc, uo_alloc, eu_alloc, en_alloc,
+        ave_usage_alloc, on_alloc, uo_alloc, eu_alloc, en_alloc, en_ne_alloc, eu_ne_alloc,
         an_S_alloc, an_log_S_alloc, 
         ua_S_alloc, ua_log_S_alloc, 
         eu_S_alloc, eu_log_S_alloc, 
         en_S_alloc, en_log_S_alloc,
         en_ne_S_alloc, en_ne_log_S_alloc,
         
-        ave_usage_comp, on_comp, uo_comp, eu_comp, en_comp,
+        ave_usage_comp, on_comp, uo_comp, eu_comp, en_comp, en_ne_comp, eu_ne_comp,
         an_S_comp, an_log_S_comp,
         ua_S_comp, ua_log_S_comp,
         eu_S_comp, eu_log_S_comp, 
@@ -899,12 +911,13 @@ def find_comp_range(timeline, parent):
 
 def get_all_need_usage_occupy_eff(timeline, i_beg, i_end, env='net'):
     if i_beg < 0:
-        return -1, -1, -1, -1
+        return -1, -1, -1, -1, -1
 
     need_fast_total = 0
     usage_total = 0
     occupy_total = 0
     eff_u_total = 0
+    eff_u_ne_total = 0 if env == 'spb' else -1
     for idx_unit in range(i_beg, i_end + 1):
         unit = timeline[idx_unit]
         need_fast_all = unit[NEED_FAST_ALL_IDX]
@@ -918,7 +931,10 @@ def get_all_need_usage_occupy_eff(timeline, i_beg, i_end, env='net'):
         usage_total += usage_all
         occupy_total += occupy_all
         eff_u_total += eff_u_all
-    return need_fast_total, usage_total, occupy_total, eff_u_total
+        if env == 'spb':
+            eff_u_ne_all = unit[EFF_U_NE_ALL_IDX]
+            eff_u_ne_total += eff_u_ne_all
+    return need_fast_total, usage_total, occupy_total, eff_u_total, eff_u_ne_total
 
 
 def get_usage_entropy(timeline, i_beg, i_end, env='net'):
@@ -1172,11 +1188,9 @@ def get_an_ua_eu_en_entropy_v6(timeline, i_beg, i_end, span=1):
 
 # AN:    f(ui, ai) = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
 # UA,EU: f(ui, ai) = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
-def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
+def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1, env='net'):
     if i_beg < 0:
         return -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
-
-    env = 'net' if len(timeline[0]) < EFF_U_NE_ALL_IDX else 'spb'
 
     an_items = {}
     ua_items = {}
@@ -1488,19 +1502,15 @@ if __name__ == "__main__":
         path = os.path.join(grandParent, parent)
         if not os.path.isdir(path):
             continue
-        # if "spb" in parent:
-        #     continue
+        if "not" in parent:
+            continue
         parents.append(path)
         
-    p = Pool(2)
+    p = Pool(3)
     res_li = []
     parents.sort()
     # parents.reverse()
     for parent in parents:
-        # if '0429175153-' not in parent:
-        # if re.search(r'net-[0-9]+-50-1-', parent) is None and \
-        #    re.search(r'spb-[0-9]+-50-1', parent) is None:
-        # continue
         res = p.apply_async(calculate_wrapper, (parent, out_filepath))
         res_li.append(res)
     
@@ -1509,54 +1519,3 @@ if __name__ == "__main__":
         if r == 0:
             continue
         print(r)
-    
-    # suffix = hashlib.md5(grandParent.encode('utf-8')).hexdigest()[:6]
-    # out_filepath = os.path.join(
-    #     grandParent, f'an_ua_eu_en_entropy_v7-{suffix}.csv')
-    # with open(out_filepath, 'w+') as f:
-    #     print(out_filepath)
-        # f.write(','.join(['t_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task', 'un', 'uo_alloc', 'uo_var_alloc', 'acc_alloc', 'acc_var_alloc', 'ur_need', 'ur_alloc', 'yield', 'goodput', 'need_beg', 'need_len', 'alloc_len'])+'\n')
-        # f.write(','.join([
-        #     't_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task',
-
-        #     '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
-        #     '占用需求熵_need', '占用需求熵_p_need',
-        #     '使用率熵_need', '使用率熵_p_need',
-        #     '有效使用熵_need', '有效使用熵_p_need',
-        #     '有效需求熵_need', '有效需求熵_p_need',
-            
-        #     '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
-        #     '占用需求熵_alloc', '占用需求熵_p_alloc',
-        #     '使用率熵_alloc', '使用率熵_p_alloc',
-        #     '有效使用熵_alloc', '有效使用熵_p_alloc',
-        #     '有效需求熵_alloc', '有效需求熵_p_alloc',
-            
-        #     '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
-        #     '占用需求熵_comp', '占用需求熵_p_comp',
-        #     '使用率熵_comp', '使用率熵_p_comp',
-        #     '有效使用熵_comp', '有效使用熵_p_comp',
-        #     '有效需求熵_comp', '有效需求熵_p_comp',
-
-        #     'yield', 'goodput',
-        #     'need_beg', 'need_len', 'alloc_len', 'comp_len'
-        # ])+'\n')
-        # f.write(','.join([
-        #     't_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task',
-
-        #     '分配需求比_need', '分配需求比标准差_need',
-        #     '使用分配比_need', '使用分配比标准差_need',
-        #     '有效使用率_need', '有效使用率_标准差_need',
-            
-        #     '分配需求比_alloc', '分配需求比标准差_alloc',
-        #     '使用分配比_alloc', '使用分配比标准差_alloc',
-        #     '有效使用率_alloc', '有效使用率_标准差_alloc',
-
-        #     'yield', 'goodput',
-        #     'need_beg', 'need_len', 'alloc_len'
-        # ])+'\n')
-        # for res in res_li:
-        #     r = res.get()
-        #     if r == 0:
-        #         continue
-        #     print(r)
-        #     f.write(r+'\n')

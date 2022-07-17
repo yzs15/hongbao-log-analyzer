@@ -21,18 +21,21 @@ ROOTS=( \
 print_header() {
     echo 't_run','env','no_task','no_real_task','config','acc_speed','peak_task',\
 '平均使用核数_need','占用/需求_need','使用/占用_need','有效/使用_need','有效/需求_need',\
+'有效/使用_ne_need','有效/需求_ne_need',\
 '占用需求熵_need','占用需求熵_p_need',\
 '使用率熵_need','使用率熵_p_need',\
 '有效使用熵_need','有效使用熵_p_need',\
 '有效需求熵_need','有效需求熵_p_need',\
 '有效使用熵_ne_need','有效使用熵_ne_p_need',\
 '平均使用核数_alloc','占用/需求_alloc','使用/占用_alloc','有效/使用_alloc','有效/需求_alloc',\
+'有效/使用_ne_alloc','有效/需求_ne_alloc',\
 '占用需求熵_alloc','占用需求熵_p_alloc',\
 '使用率熵_alloc','使用率熵_p_alloc',\
 '有效使用熵_alloc','有效使用熵_p_alloc',\
 '有效需求熵_alloc','有效需求熵_p_alloc',\
 '有效使用熵_ne_alloc','有效使用熵_ne_p_alloc',\
 '平均使用核数_comp','占用/需求_comp','使用/占用_comp','有效/使用_comp','有效/需求_comp',\
+'有效/使用_ne_comp','有效/需求_ne_comp',\
 '占用需求熵_comp','占用需求熵_p_comp',\
 '使用率熵_comp','使用率熵_p_comp',\
 '有效使用熵_comp','有效使用熵_p_comp',\
@@ -56,11 +59,11 @@ do
             continue
         fi
 
-        # python3 recalculate.py $root_dir
+        python3 recalculate.py $root_dir
 
         # check which directories are valid
         # bash check_valid.sh $root_dir
-        # python3 check_log_valid.py $root_dir
+        python3 check_log_valid.py $root_dir
         # python3 check_parent_valid.py $root_dir
     done
 done
