@@ -14,6 +14,7 @@ def check(parent):
         print(parent, 'Not found log dirpath')
         return 0
     
+    print(os.getpid(), '====> check_log_valid', parent)
     if not os.path.exists(os.path.join(log_dirpath, 'net.jpg')) and \
         not os.path.exists(os.path.join(log_dirpath, 'spb.jpg')):
             os.rename(parent, parent+'not')
@@ -27,7 +28,6 @@ def check(parent):
     if os.path.exists(os.path.join(parent, 'k8s-cpu')):
         return 0
 
-    print('====> ', parent)
     if not os.path.exists(os.path.join(parent, 'ts_cpu_alloc_100ms.csv')):
         os.system(f'python3 ./src/ts_cpu_alloc.py {log_dirpath}')
     if not os.path.exists(os.path.join(parent, 'ts_cpu_usage_100ms.csv')):

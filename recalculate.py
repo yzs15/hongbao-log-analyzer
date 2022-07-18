@@ -78,7 +78,7 @@ def recalculate_not_exist(parent):
         os.path.exists(os.path.join(log_dirpath, 'spb.jpg')):
             return 0
 
-    print(os.getpid(), '====>', parent)
+    print(os.getpid(), '====> recalculate', parent)
     recalculate_one(parent)
     return 0
 

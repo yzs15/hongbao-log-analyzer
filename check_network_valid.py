@@ -32,7 +32,6 @@ def next_msg(que, lock, parent):
             break
     log_fd = open(os.path.join(log_dirpath, 'log.txt'), 'r')
     
-    print(os.getpid(), '====>', parent)
     message_id = 0
     logs = []
     while True:
@@ -44,6 +43,7 @@ def next_msg(que, lock, parent):
         if line == '':
             continue
         if '----' in line:
+            assert len(logs) <= 14, 'log length greater than 14'
             que.put([message_id, logs])
             message_id = 0
             logs = []
@@ -97,7 +97,7 @@ def check(que, lock, parent):
     mac_parent = get_mac_parent(parent)
     if skip(parent, lock, mac_parent, True):
         return 0
-    print(os.getpid(), '====>', parent)
+    print(os.getpid(), '====> check_network_valid', parent)
     
     if 'net' in parent:
         env = 'net'

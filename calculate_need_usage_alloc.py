@@ -338,7 +338,7 @@ def calculate_one(parent, entropy_filepath):
         print(parent, 'Not found k8s-cpu or ts-cpu')
         return 0
     mac_parent = get_mac_parent(parent)
-    print(mac_parent)
+    print(os.getpid(), '====> entropy', mac_parent)
     suffix = hashlib.md5(mac_parent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
@@ -1506,7 +1506,7 @@ if __name__ == "__main__":
             continue
         parents.append(path)
         
-    p = Pool(3)
+    p = Pool(8)
     res_li = []
     parents.sort()
     # parents.reverse()
