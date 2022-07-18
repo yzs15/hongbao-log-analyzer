@@ -34,8 +34,12 @@ def check(parent):
         ts_cpu_dir = os.path.join(parent, 'ts-cpu')
         os.system(f'python3 ./src/ts_cpu_usage.py {ts_cpu_dir} 100')
     
+    if not os.path.exists(os.path.join(parent, 'ts_eff_cpu_usage_100ms.csv')):
+        os.system(f'python3 ./src/ts_eff_cpu_usage.py {parent} 100')
+    
     if not os.path.exists(os.path.join(parent, 'ts_cpu_alloc_100ms.csv')) or \
-        not os.path.exists(os.path.join(parent, 'ts_cpu_usage_100ms.csv')):
+        not os.path.exists(os.path.join(parent, 'ts_cpu_usage_100ms.csv')) or \
+        not os.path.exists(os.path.join(parent, 'ts_eff_cpu_usage_100ms.csv')):
             os.rename(parent, parent+'not')
             return 0
     return 0

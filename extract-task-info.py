@@ -90,6 +90,8 @@ def extract(que, parent):
         log_len = len(logs)
         id_str = msg_id_int2dot(msg_id)
         qos = get_qos(msg_id)
+        if qos == -1:
+            continue
         duration = -1
         if env == 'net':
             if log_len == NET_LEN_1:
@@ -115,7 +117,7 @@ def extract(que, parent):
 if __name__=="__main__":
     grandParent = sys.argv[1]
     
-    p = Pool(8)
+    p = Pool(16)
     res_li = []
     
     parents = []

@@ -48,7 +48,7 @@ def calculate_eff_usage(parent, env, time_interval):
     msg_chains = load_logs_from_dir(log_dirpath, 0)  #type: list[(int, list[event_log])]
 
     timeline = {}
-    no_est_timeline = {}
+    # no_est_timeline = {}
     for msg_id, logs in msg_chains:
         if check_noise(msg_id) or check_warm(msg_id) or check_person(msg_id):
             continue
@@ -77,11 +77,11 @@ def calculate_eff_usage(parent, env, time_interval):
         need_time = net_exec_time[location-1]
         resp_time = ts_end - ts_start - 1
         add2timeline(timeline, ts_start, resp_time, need_time/resp_time, location, time_interval)
-        if env == 'spb':
-            ts_valid_start = logs[8].time
-            ts_valid_end = logs[9].time
-            valid_time = ts_valid_end - ts_valid_start - 1
-            add2timeline(no_est_timeline, ts_valid_start, valid_time, 1, location, time_interval)
+        # if env == 'spb':
+        #     ts_valid_start = logs[8].time
+        #     ts_valid_end = logs[9].time
+        #     valid_time = ts_valid_end - ts_valid_start - 1
+        #     add2timeline(no_est_timeline, ts_valid_start, valid_time, 1, location, time_interval)
 
     def build_timeline(timeline):
         timeline_list = list(timeline.items())
@@ -104,8 +104,8 @@ def calculate_eff_usage(parent, env, time_interval):
         return finial_timeline
     
     finial_timeline = build_timeline(timeline)
-    finial_no_est_timeline = None
-    if env == 'spb':
-        finial_no_est_timeline = build_timeline(no_est_timeline)
+    # finial_no_est_timeline = None
+    # if env == 'spb':
+    #     finial_no_est_timeline = build_timeline(no_est_timeline)
 
-    return finial_timeline, finial_no_est_timeline
+    return finial_timeline
