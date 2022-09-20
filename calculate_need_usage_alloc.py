@@ -38,15 +38,19 @@ from src.k8s_cpu_utilization import list_total_cpu, compress_final_data
 from calculate_eff_usage import calculate_eff_usage
 from src.analyzer_local import load_logs_from_dir, msg_id_dot2int
 from src.analyzer import event_log
+from out_exec_time import check_net_6, check_net_8, check_spb_14, get_qos
+
 
 time_interval = 100 * 1000 * 1000
-
+lock = Lock()
 
 def get_mac_parent(parent):
     ret = parent
     ret = ret.replace('/Users/jian/logs', '/Volumes/Elements')
     ret = ret.replace('/mnt/g', '/Volumes/Elements')
     ret = ret.replace('/mnt/e/zsj/logs', '/Volumes/Elements')
+    ret = ret.replace('/mnt/e', '/Volumes/Elements')
+    ret = ret.replace('/mnt/f', '/Volumes/Elements')
     return ret
 
 def get_k8s_req_lim(parent):
@@ -196,7 +200,7 @@ def calculate_usage(env, parent, time_interval):
 
 def output_timeline(timeline, filepath):
     f = open(filepath, 'w+')
-    f.write('ts,need_fast_bj,need_fast_nj,need_fast_all,need_slow_bj,need_slow_nj,need_slow_all,alloc_bj,alloc_nj,alloc_all,usage_bj,usage_nj,usage_all,eff_bj,eff_nj,eff_all\n')
+    f.write('ts,need_fast_bj,need_fast_nj,need_fast_all,need_slow_bj,need_slow_nj,need_slow_all,alloc_bj,alloc_nj,alloc_all,usage_bj,usage_nj,usage_all,eff_bj,eff_nj,eff_all,eff_ne_bj,eff_ne_nj,eff_ne_all\n')
     for rec in timeline:
         f.write(','.join(map(str, rec))+'\n')
     f.close()
@@ -215,6 +219,93 @@ def get_yield(parent):
     return -1
 
 
+def load_yld_machs(parent):
+    if os.path.exists(os.path.join(parent, '../yld_machs.json')):
+        with open(os.path.join(parent, '../yld_machs.json'), 'r') as f:
+            return json.load(f)
+    return {}
+
+def dump_yld_machs(parent, data):
+    with open(os.path.join(parent, '../yld_machs.json'), 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def get_msg_mach_yield(parent):
+    with lock:
+        yld_machs = load_yld_machs(parent)
+    mac_parent = get_mac_parent(parent)    
+    if mac_parent in yld_machs:
+        return yld_machs[mac_parent]
+
+    log_dirpath = None
+    for file in os.listdir(parent):
+        if not os.path.isdir(os.path.join(parent, file)):
+            continue
+        if file.startswith('2022'):
+            log_dirpath = os.path.join(parent, file)
+            break
+    if log_dirpath is None:
+        print(parent, 'Not found log dirpath')
+        return -1
+    msg_chains = load_logs_from_dir(log_dirpath, 0)
+
+    SPB_LEN = 14
+    SPB_START_IDX = 2
+    SPB_END_IDX = SPB_LEN - 4
+
+    # get average communication latency
+    comm_lat_total = 0
+    comm_lat_no = 0
+    for msg_id, logs in msg_chains:
+        if check_warm(msg_id) or check_person(msg_id) or check_noise(msg_id):
+            continue
+        if not check_spb_14(logs):
+            continue
+        
+        comp_in_bj = False
+        if logs[SPB_END_IDX].logger == "BJ-Machn-0" or \
+                logs[SPB_END_IDX].logger == "BJ-Machn-1":
+            comp_in_bj = True
+        if comp_in_bj:
+            continue
+
+        comm_lat = logs[SPB_END_IDX+1].time - logs[SPB_END_IDX].time
+        if comm_lat > 100 * 1000 * 1000:
+            continue
+        comm_lat_total += comm_lat
+        comm_lat_no += 1
+    comm_lat_ave = comm_lat_total / comm_lat_no
+
+    no_good = 0
+    no_task = 0
+    for msg_id, logs in msg_chains:
+        if check_warm(msg_id) or check_person(msg_id) or check_noise(msg_id):
+            continue
+        no_task += 1
+        if not check_spb_14(logs):
+            continue
+        
+        comp_in_bj = False
+        if logs[SPB_END_IDX].logger == "BJ-Machn-0" or \
+                logs[SPB_END_IDX].logger == "BJ-Machn-1":
+            comp_in_bj = True
+
+        duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
+        if comp_in_bj == 1:
+            duration += comm_lat_ave
+        
+        qos = get_qos(msg_id)
+        if duration < qos:
+            no_good += 1
+
+    yld = no_good / no_task
+    with lock:
+        yld_machs = load_yld_machs(parent)
+        yld_machs[mac_parent] = yld
+        dump_yld_machs(parent, yld_machs)
+    return yld
+
+
 def get_goodput(parent):
     for dir in os.listdir(parent):
         if not dir.startswith('2022'):
@@ -227,7 +318,60 @@ def get_goodput(parent):
             return sum(map(float, parts[7:]))
     return -1
 
-lock = Lock()
+def calculate_eff_ne_usage(parent, env, time_interval, eff_timeline):
+    eff_ne_timeline = []
+    
+    if env == 'net':
+        for unit in eff_timeline:
+            eff_ne_timeline.append([unit[0], 0, 0, 0])
+        return eff_ne_timeline
+    
+    filename = f'ts_eff_cpu_usage_{time_interval//1000000}ms-99999998.csv'
+    filepath = os.path.join(parent, filename)
+    if not os.path.exists(filepath):
+        filename = f'ts_eff_cpu_usage_{time_interval//1000000}ms.csv'
+        filepath = os.path.join(parent, filename)
+        if not os.path.exists(filepath):
+            return []
+    
+    with open(filepath, 'r') as f:
+        rows = f.read().strip().split('\n')
+        for row in rows:
+            cols = row.strip().split(',')
+            cols = cols[:7]
+            cols[0] = int(cols[0])
+            for i in range(1, 7):
+                if len(cols[i]) > 0:
+                    cols[i] = float(cols[i])
+                else:
+                    cols[i] = 0
+
+            record = [0, 0, 0, 0]
+            record[0] = cols[0]
+            record[1] = sum(cols[1:3])
+            record[2] = sum(cols[3:5])
+            record[3] = sum(cols[5:7])
+            eff_ne_timeline.append(record)
+    return eff_ne_timeline
+    
+def read_timeline_file(filepath):
+    timeline = []
+    first_line = True
+    with open(filepath, 'r') as f:
+        while True:
+            line = f.readline()
+            if line == '':
+                break
+            if first_line:
+                first_line = False
+                continue
+            parts = line.strip().split(',')
+
+            parts[0] = int(parts[0])
+            parts[1:] = map(float, parts[1:])
+            timeline.append(parts)
+    return timeline
+
 def calculate_one(parent, entropy_filepath):
     if not os.path.isdir(parent):
         return 0
@@ -242,33 +386,53 @@ def calculate_one(parent, entropy_filepath):
     if re.search(r'not$', parent) is not None:
         return 0
 
-    if not os.path.exists(os.path.join(parent, 'k8s-cpu')) and not os.path.exists(os.path.join(parent, 'ts-cpu')):
-        print('Not found k8s-cpu or ts-cpu')
+    if not os.path.exists(os.path.join(parent, 'k8s-cpu')) and \
+        not os.path.exists(os.path.join(parent, 'ts-cpu')):
+        print(parent, 'Not found k8s-cpu or ts-cpu')
         return 0
     mac_parent = get_mac_parent(parent)
-    print(mac_parent)
+    print(os.getpid(), '====> entropy', mac_parent)
+    
     suffix = hashlib.md5(mac_parent.encode('utf-8')).hexdigest()[:6]
-    out_filepath = os.path.join(
-        parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}.csv")
-    # if env == 'spb':
-    #     out_filepath = os.path.join(
-    #         parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-2.csv")
-    if os.path.exists(out_filepath):  # 文件已经存在，直接读取
-        timeline = []
-        first_line = True
-        with open(out_filepath, 'r') as f:
-            while True:
-                line = f.readline()
-                if line == '':
-                    break
-                if first_line:
-                    first_line = False
-                    continue
-                parts = line.strip().split(',')
+    if env == 'net':
+        out_filepath = os.path.join(parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-6.csv")
+    
+    elif env == 'spb':
+        out_filepath = os.path.join(parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-5.csv")
+        if os.path.exists(out_filepath):
+            eff_ne_timeline = calculate_eff_ne_usage(parent, env, time_interval, [])
+            if len(eff_ne_timeline) == 0:
+                print('!!!! ', parent, "no effective usage !!!!")
+                return 0
+        
+            timeline = read_timeline_file(out_filepath)
+            ei, ti = 0, 0
+            new_timeline = []
+            while ti < len(timeline):
+                unit = timeline[ti]
+                if timeline[ti][0] > eff_ne_timeline[ei][0]:
+                    assert eff_ne_timeline[ei][3] == 0
+                    ei += 1
+                elif timeline[ti][0] < eff_ne_timeline[ei][0]:
+                    new_unit = unit[:EFF_U_ALL_IDX+1]
+                    new_unit = new_unit + [0,0,0]
+                    new_timeline.append(new_unit)
+                    ti += 1
+                else:
+                    new_unit = unit[:EFF_U_ALL_IDX+1]
+                    new_unit = new_unit + eff_ne_timeline[ei][1:4]
+                    new_timeline.append(new_unit)
+                    ti += 1
+                    ei += 1
+            out_filepath = os.path.join(parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-6.csv")
+            output_timeline(new_timeline, out_filepath)
+        out_filepath = os.path.join(parent, f"{env}_naue_{time_interval//1000000}_thing_send-{suffix}-6.csv")
 
-                parts[0] = int(parts[0])
-                parts[1:] = map(float, parts[1:])
-                timeline.append(parts)
+    if os.path.exists(out_filepath):  # 文件已经存在，直接读取
+        timeline = read_timeline_file(out_filepath)
+        if len(timeline) == 0:
+            print('!!!! ', parent, 'timeline length is zero!!!!')
+            return 0
 
     else:  # 文件不存在，需要计算
         need_timeline = calculate_need(parent, env, time_interval)
@@ -286,29 +450,40 @@ def calculate_one(parent, entropy_filepath):
         if len(eff_timeline) == 0:
             print('!!!! ', parent, "no effective usage !!!!")
             return 0
+        
+        eff_ne_timeline = calculate_eff_ne_usage(parent, env, time_interval, eff_timeline)
+        if len(eff_ne_timeline) == 0:
+            print('!!!! ', parent, "no effective usage !!!!")
+            return 0
 
-        need_len, au_len, eff_len = len(need_timeline), len(alloc_usage_timeline), len(eff_timeline)
+        need_len, au_len, eff_len, eff_ne_len = len(need_timeline), \
+                                    len(alloc_usage_timeline), \
+                                    len(eff_timeline), len(eff_ne_timeline)
         ts_beg_need, ts_end_need = need_timeline[0][0], need_timeline[need_len-1][0]
         ts_beg_au, ts_end_au = alloc_usage_timeline[0][0], alloc_usage_timeline[au_len-1][0]
         ts_beg_eff, ts_end_eff = eff_timeline[0][0], eff_timeline[eff_len-1][0]
-
+        ts_beg_eff_ne, ts_end_eff_ne = eff_ne_timeline[0][0], eff_ne_timeline[eff_ne_len-1][0]
+        
         ts_beg_need %= 1000000
         ts_end_need %= 1000000
         ts_beg_au %= 1000000
         ts_end_au %= 1000000
         ts_beg_eff %= 1000000
         ts_end_eff %= 1000000
+        ts_beg_eff_ne %= 1000000
+        ts_end_eff_ne %= 1000000
 
-        ts_first = min(ts_beg_need, ts_beg_au, ts_beg_eff)
-        ts_last = max(ts_end_need, ts_end_au, ts_end_eff)
+        ts_first = min(ts_beg_need, ts_beg_au, ts_beg_eff, ts_beg_eff_ne)
+        ts_last = max(ts_end_need, ts_end_au, ts_end_eff, ts_end_eff_ne)
 
         i_need = 0
         i_au = 0
         i_eff = 0
+        i_eff_ne = 0
         timeline = []
         ts_cur = ts_first
         while ts_cur != ts_last+1:
-            record = [0] * 16
+            record = [0] * 19
             record[0] = ts_cur
             if i_need < need_len and need_timeline[i_need][0] % 1000000 == ts_cur:
                 record[1:7] = need_timeline[i_need][1:]
@@ -317,8 +492,11 @@ def calculate_one(parent, entropy_filepath):
                 record[7:13] = alloc_usage_timeline[i_au][1:]
                 i_au += 1
             if i_eff < eff_len and eff_timeline[i_eff][0] % 1000000 == ts_cur:
-                record[13:] = eff_timeline[i_eff][1:]
+                record[13:16] = eff_timeline[i_eff][1:]
                 i_eff += 1
+            if i_eff_ne < eff_ne_len and eff_ne_timeline[i_eff_ne][0] % 1000000 == ts_cur:
+                record[16:] = eff_ne_timeline[i_eff_ne][1:]
+                i_eff_ne += 1
             timeline.append(record)
             ts_cur = (ts_cur+1) % 1000000
         output_timeline(timeline, out_filepath)
@@ -475,47 +653,65 @@ def build_str_entropy(timeline, parent):
     goodput = get_goodput(parent)
     if yld == -1 or goodput == -1:
         return None
+    
+    yld_mach = -1
+    if env == 'spb':
+        yld_mach = get_msg_mach_yield(parent)
 
-    def cal_ratio(need, usage, occupy, eff_u):
-        on, uo, eu, en = -1, -1, -1, -1
+    def cal_ratio(need, usage, occupy, eff_u, eff_u_ne):
+        on, uo, eu, en, eu_ne, en_ne = -1, -1, -1, -1, -1, -1
         if need > 0:
             on = occupy / need
             en = eff_u / need
+            en_ne = eff_u_ne / need
         if occupy > 0:
             uo = usage / occupy
         if usage > 0:
             eu = eff_u / usage
-        return on, uo, eu, en
+            eu_ne = eff_u_ne / usage
+        return on, uo, eu, en, en_ne, eu_ne
 
     # 计算从发起需求到计算结束时间段的熵
     i_comp_beg, i_comp_end = find_comp_range(timeline, parent)
     if i_comp_beg == -1 or i_comp_end == -1:
         print(f'{parent} log not long enough')
         return None
-    need_comp, usage_comp, occupy_comp, eff_comp = get_all_need_usage_occupy_eff(
-        timeline, i_comp_beg, i_comp_end, env)
-    on_comp, uo_comp, eu_comp, en_comp = cal_ratio(
-        need_comp, usage_comp, occupy_comp, eff_comp)
-    an_S_comp, an_log_S_comp, ua_S_comp, ua_log_S_comp, eu_S_comp, eu_log_S_comp, en_S_comp, en_log_S_comp = get_an_ua_eu_en_entropy_v7(
-        timeline, i_comp_beg, i_comp_end, 1)
+    need_comp, usage_comp, occupy_comp, eff_comp, eff_ne_comp = \
+        get_all_need_usage_occupy_eff(timeline, i_comp_beg, i_comp_end, env)
+    on_comp, uo_comp, eu_comp, en_comp, en_ne_comp, eu_ne_comp = \
+        cal_ratio(need_comp, usage_comp, occupy_comp, eff_comp, eff_ne_comp)
+    an_S_comp, an_log_S_comp, \
+        ua_S_comp, ua_log_S_comp, \
+        eu_S_comp, eu_log_S_comp, \
+        en_S_comp, en_log_S_comp, \
+        en_ne_S_comp, en_ne_log_S_comp = get_an_ua_eu_en_entropy_v7(timeline, i_comp_beg, i_comp_end, 1, env)
+    ave_usage_comp = get_ave_usage(timeline, i_comp_beg, i_comp_end)
 
     # 计算从发起需求到请求结束时间段的熵
     i_need_beg, i_need_end = find_need_range(timeline, parent)
-    need_need, usage_need, occupy_need, eff_need = get_all_need_usage_occupy_eff(
-        timeline, i_need_beg, i_need_end, env)
-    on_need, uo_need, eu_need, en_need = cal_ratio(
-        need_need, usage_need, occupy_need, eff_need)
-    an_S_need, an_log_S_need, ua_S_need, ua_log_S_need, eu_S_need, eu_log_S_need, en_S_need, en_log_S_need = get_an_ua_eu_en_entropy_v7(
-        timeline, i_need_beg, i_need_end, 1)
+    need_need, usage_need, occupy_need, eff_need, eff_ne_need = \
+        get_all_need_usage_occupy_eff(timeline, i_need_beg, i_need_end, env)
+    on_need, uo_need, eu_need, en_need, en_ne_need, eu_ne_need = \
+        cal_ratio(need_need, usage_need, occupy_need, eff_need, eff_ne_need)
+    an_S_need, an_log_S_need, \
+        ua_S_need, ua_log_S_need, \
+        eu_S_need, eu_log_S_need, \
+        en_S_need, en_log_S_need, \
+        en_ne_S_need, en_ne_log_S_need = get_an_ua_eu_en_entropy_v7(timeline, i_need_beg, i_need_end, 1, env)
+    ave_usage_need = get_ave_usage(timeline, i_need_beg, i_need_end)
 
     # 计算从发起请求到分配结束时间段的熵
     i_alloc_beg, i_alloc_end = find_alloc_range(timeline, parent)
-    need_alloc, usage_alloc, occupy_alloc, eff_alloc = get_all_need_usage_occupy_eff(
-        timeline, i_alloc_beg, i_alloc_end, env)
-    on_alloc, uo_alloc, eu_alloc, en_alloc = cal_ratio(
-        need_alloc, usage_alloc, occupy_alloc, eff_alloc)
-    an_S_alloc, an_log_S_alloc, ua_S_alloc, ua_log_S_alloc, eu_S_alloc, eu_log_S_alloc, en_S_alloc, en_log_S_alloc = get_an_ua_eu_en_entropy_v7(
-        timeline, i_alloc_beg, i_alloc_end, 1)
+    need_alloc, usage_alloc, occupy_alloc, eff_alloc, eff_ne_alloc = \
+        get_all_need_usage_occupy_eff(timeline, i_alloc_beg, i_alloc_end, env)
+    on_alloc, uo_alloc, eu_alloc, en_alloc, en_ne_alloc, eu_ne_alloc = \
+        cal_ratio(need_alloc, usage_alloc, occupy_alloc, eff_alloc, eff_ne_alloc)
+    an_S_alloc, an_log_S_alloc, \
+        ua_S_alloc, ua_log_S_alloc, \
+        eu_S_alloc, eu_log_S_alloc, \
+        en_S_alloc, en_log_S_alloc, \
+        en_ne_S_alloc, en_ne_log_S_alloc = get_an_ua_eu_en_entropy_v7(timeline, i_alloc_beg, i_alloc_end, 1, env)
+    ave_usage_alloc = get_ave_usage(timeline, i_alloc_beg, i_alloc_end)
 
     if on_need + uo_need + eu_need == -3 and on_alloc + uo_alloc + eu_alloc == -3:
         return None
@@ -524,6 +720,7 @@ def build_str_entropy(timeline, parent):
         comp_ranges = load_comp_ranges(parent)
     task_num = comp_ranges[get_mac_parent(parent)][5]
     if task_num < float(no_task) * 0.625:
+        print(parent, "real task is not enough")
         return None
 
     len_need_range = i_need_end - i_need_beg + 1
@@ -532,25 +729,28 @@ def build_str_entropy(timeline, parent):
     return ','.join(map(str, [
         t_run, env, no_task, task_num, config, acc_speed, peak_task,
 
-        on_need, uo_need, eu_need, en_need,
+        ave_usage_need, on_need, uo_need, eu_need, en_need, en_ne_need, eu_ne_need,
         an_S_need, an_log_S_need,
         ua_S_need, ua_log_S_need,
         eu_S_need, eu_log_S_need, 
         en_S_need, en_log_S_need,
+        en_ne_S_need, en_ne_log_S_need,
         
-        on_alloc, uo_alloc, eu_alloc, en_alloc,
+        ave_usage_alloc, on_alloc, uo_alloc, eu_alloc, en_alloc, en_ne_alloc, eu_ne_alloc,
         an_S_alloc, an_log_S_alloc, 
         ua_S_alloc, ua_log_S_alloc, 
         eu_S_alloc, eu_log_S_alloc, 
         en_S_alloc, en_log_S_alloc,
+        en_ne_S_alloc, en_ne_log_S_alloc,
         
-        on_comp, uo_comp, eu_comp, en_comp,
+        ave_usage_comp, on_comp, uo_comp, eu_comp, en_comp, en_ne_comp, eu_ne_comp,
         an_S_comp, an_log_S_comp,
         ua_S_comp, ua_log_S_comp,
         eu_S_comp, eu_log_S_comp, 
         en_S_comp, en_log_S_comp,
+        en_ne_S_comp, en_ne_log_S_comp,
         
-        yld, goodput,
+        yld, yld_mach, goodput,
         i_need_beg, len_need_range, len_alloc_range, len_comp_range
     ]))
 
@@ -595,6 +795,7 @@ NEED_SLOW_ALL_IDX = 6
 ALLOC_ALL_IDX = 9
 USAGE_ALL_IDX = 12
 EFF_U_ALL_IDX = 15
+EFF_U_NE_ALL_IDX = 18
 
 
 def find_need_range(timeline, parent):
@@ -720,7 +921,7 @@ def get_time_range(parent):
             log_dirpath = os.path.join(parent, file)
             break
     if log_dirpath is None:
-        print('Not found log dirpath')
+        print(parent, 'Not found log dirpath')
         return []
     msg_time_ranges = load_log_time_range(log_dirpath)
 
@@ -779,12 +980,13 @@ def find_comp_range(timeline, parent):
 
 def get_all_need_usage_occupy_eff(timeline, i_beg, i_end, env='net'):
     if i_beg < 0:
-        return -1, -1, -1, -1
+        return -1, -1, -1, -1, -1
 
     need_fast_total = 0
     usage_total = 0
     occupy_total = 0
     eff_u_total = 0
+    eff_u_ne_total = 0
     for idx_unit in range(i_beg, i_end + 1):
         unit = timeline[idx_unit]
         need_fast_all = unit[NEED_FAST_ALL_IDX]
@@ -793,12 +995,14 @@ def get_all_need_usage_occupy_eff(timeline, i_beg, i_end, env='net'):
         usage_all = unit[USAGE_ALL_IDX]
         occupy_all = max(alloc_all, usage_all)
         eff_u_all = unit[EFF_U_ALL_IDX]
+        eff_u_ne_all = unit[EFF_U_NE_ALL_IDX]
 
         need_fast_total += need_fast_all
         usage_total += usage_all
         occupy_total += occupy_all
         eff_u_total += eff_u_all
-    return need_fast_total, usage_total, occupy_total, eff_u_total
+        eff_u_ne_total += eff_u_ne_all
+    return need_fast_total, usage_total, occupy_total, eff_u_total, eff_u_ne_total
 
 
 def get_usage_entropy(timeline, i_beg, i_end, env='net'):
@@ -1052,14 +1256,16 @@ def get_an_ua_eu_en_entropy_v6(timeline, i_beg, i_end, span=1):
 
 # AN:    f(ui, ai) = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
 # UA,EU: f(ui, ai) = (((1-ui)/(1+ui))**2) * ((2*ai+1)/(ai+1)) / 8
-def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
+def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1, env='net'):
     if i_beg < 0:
-        return -1, -1, -1, -1, -1, -1, -1, -1
+        return -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 
     an_items = {}
     ua_items = {}
     eu_items = {}
     en_items = {}
+    eu_ne_items = {}
+    en_ne_items = {}
 
     def add_dict(items, item):
         if item not in items:
@@ -1074,6 +1280,7 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
         usage_item = 0
         alloc_item = 0
         eff_item = 0
+        eff_ne_item = 0
         while i_cur <= i_end and cnt < span:
             unit = timeline[i_cur]
             need_all = unit[NEED_FAST_ALL_IDX]
@@ -1089,6 +1296,9 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
             eff_all = unit[EFF_U_ALL_IDX]
             eff_item += eff_all
             
+            eff_ne_all = unit[EFF_U_NE_ALL_IDX]
+            eff_ne_item += eff_ne_all
+
             i_cur += 1
             cnt += 1
         
@@ -1103,6 +1313,12 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
         
         en_ratio = min(100, int(eff_item/need_item * 100 + 0.5)) if need_item > 0 else 100
         add_dict(en_items, en_ratio/100.)
+        
+        eu_ne_ratio = min(100, int(eff_ne_item/usage_item * 100 + 0.5)) if usage_item > 0 else 100
+        add_dict(eu_ne_items, eu_ne_ratio/100.)
+        
+        en_ne_ratio = min(100, int(eff_ne_item/need_item * 100 + 0.5)) if need_item > 0 else 100
+        add_dict(en_ne_items, en_ne_ratio/100.)
     
     def cal_ai(items:dict, total, ui):
         ai = 0
@@ -1158,8 +1374,9 @@ def get_an_ua_eu_en_entropy_v7(timeline, i_beg, i_end, span=1):
     ua_S, ua_log_S = cal_entropy_ua_eu(ua_items)
     eu_S, eu_log_S = cal_entropy_ua_eu(eu_items)
     # en_S, en_log_S = cal_entropy(en_items)
+    eu_ne_S, eu_ne_log_S = cal_entropy_ua_eu(eu_ne_items)
 
-    return an_S, an_log_S, ua_S, ua_log_S, eu_S, eu_log_S, 999, 999
+    return an_S, an_log_S, ua_S, ua_log_S, eu_S, eu_log_S, 999, 999, eu_ne_S, eu_ne_log_S
 
 
 def get_un(timeline, i_beg, i_end, env='net'):
@@ -1284,17 +1501,34 @@ def get_an_ua_eu_with_var(timeline, i_beg, i_end, span):
     return an, an_var, ua, ua_var, eu, eu_var
 
 
+def calculate_wrapper(parent, out_filepath):
+    try:
+        log_dirpath = None
+        for file in os.listdir(parent):
+            if not os.path.isdir(os.path.join(parent, file)):
+                continue
+            if file.startswith('2022'):
+                log_dirpath = os.path.join(parent, file)
+                break
+        if log_dirpath is None:
+            print(parent, 'Not found log dirpath')
+            return 0
+        if not os.path.exists(os.path.join(log_dirpath, 'spb.jpg')) and \
+            not os.path.exists(os.path.join(log_dirpath, 'net.jpg')):
+                return 0
+        return calculate_one(parent, out_filepath)
+    except Exception as e:
+        print('!!!! error: ', parent, e)
+        return 0
+
+def get_ave_usage(timeline, i_beg, i_end):
+    usage_total = 0
+    for i_cur in range(i_beg, i_end+1):
+        usage_total += timeline[i_cur][12]
+    return usage_total / (i_end-i_beg+1)
+
 if __name__ == "__main__":
     grandParent = sys.argv[1]
-
-    parents = []
-    for parent in os.listdir(grandParent):
-        path = os.path.join(grandParent, parent)
-        if not os.path.isdir(path):
-            continue
-        # if "spb" in parent:
-        #     continue
-        parents.append(path)
 
     suffix = hashlib.md5(grandParent.encode('utf-8')).hexdigest()[:6]
     out_filepath = os.path.join(
@@ -1303,37 +1537,44 @@ if __name__ == "__main__":
     # entropy_file.write(','.join([
     #     't_run', 'env', 'no_task', 'real_no_task', 'config', 'acc_speed', 'peak_task',
 
-    #     '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
+    #     '平均使用核数_need', '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
     #     '占用需求熵_need', '占用需求熵_p_need',
     #     '使用率熵_need', '使用率熵_p_need',
     #     '有效使用熵_need', '有效使用熵_p_need',
     #     '有效需求熵_need', '有效需求熵_p_need',
         
-    #     '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
+    #     '平均使用核数_alloc', '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
     #     '占用需求熵_alloc', '占用需求熵_p_alloc',
     #     '使用率熵_alloc', '使用率熵_p_alloc',
     #     '有效使用熵_alloc', '有效使用熵_p_alloc',
     #     '有效需求熵_alloc', '有效需求熵_p_alloc',
         
-    #     '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
+    #     '平均使用核数_comp', '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
     #     '占用需求熵_comp', '占用需求熵_p_comp',
     #     '使用率熵_comp', '使用率熵_p_comp',
     #     '有效使用熵_comp', '有效使用熵_p_comp',
     #     '有效需求熵_comp', '有效需求熵_p_comp',
 
-    #     'yield', 'goodput',
+    #     'yield', 'yield_mach', 'goodput',
     #     'need_beg', 'need_len', 'alloc_len', 'comp_len'
     # ])+'\n')
     entropy_file.close()
     
-    p = Pool(2)
+    parents = []
+    for parent in os.listdir(grandParent):
+        path = os.path.join(grandParent, parent)
+        if not os.path.isdir(path):
+            continue
+        if "not" in parent:
+            continue
+        parents.append(path)
+        
+    p = Pool(8)
     res_li = []
+    parents.sort()
+    # parents.reverse()
     for parent in parents:
-        # if '0429175153-' not in parent:
-        # if re.search(r'net-[0-9]+-50-1-', parent) is None and \
-        #    re.search(r'spb-[0-9]+-50-1', parent) is None:
-        # continue
-        res = p.apply_async(calculate_one, (parent, out_filepath))
+        res = p.apply_async(calculate_wrapper, (parent, out_filepath))
         res_li.append(res)
     
     for res in res_li:
@@ -1341,54 +1582,3 @@ if __name__ == "__main__":
         if r == 0:
             continue
         print(r)
-    
-    # suffix = hashlib.md5(grandParent.encode('utf-8')).hexdigest()[:6]
-    # out_filepath = os.path.join(
-    #     grandParent, f'an_ua_eu_en_entropy_v7-{suffix}.csv')
-    # with open(out_filepath, 'w+') as f:
-    #     print(out_filepath)
-        # f.write(','.join(['t_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task', 'un', 'uo_alloc', 'uo_var_alloc', 'acc_alloc', 'acc_var_alloc', 'ur_need', 'ur_alloc', 'yield', 'goodput', 'need_beg', 'need_len', 'alloc_len'])+'\n')
-        # f.write(','.join([
-        #     't_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task',
-
-        #     '占用/需求_need', '使用/占用_need', '有效/使用_need', '有效/需求_need',
-        #     '占用需求熵_need', '占用需求熵_p_need',
-        #     '使用率熵_need', '使用率熵_p_need',
-        #     '有效使用熵_need', '有效使用熵_p_need',
-        #     '有效需求熵_need', '有效需求熵_p_need',
-            
-        #     '占用/需求_alloc', '使用/占用_alloc', '有效/使用_alloc', '有效/需求_alloc',
-        #     '占用需求熵_alloc', '占用需求熵_p_alloc',
-        #     '使用率熵_alloc', '使用率熵_p_alloc',
-        #     '有效使用熵_alloc', '有效使用熵_p_alloc',
-        #     '有效需求熵_alloc', '有效需求熵_p_alloc',
-            
-        #     '占用/需求_comp', '使用/占用_comp', '有效/使用_comp', '有效/需求_comp',
-        #     '占用需求熵_comp', '占用需求熵_p_comp',
-        #     '使用率熵_comp', '使用率熵_p_comp',
-        #     '有效使用熵_comp', '有效使用熵_p_comp',
-        #     '有效需求熵_comp', '有效需求熵_p_comp',
-
-        #     'yield', 'goodput',
-        #     'need_beg', 'need_len', 'alloc_len', 'comp_len'
-        # ])+'\n')
-        # f.write(','.join([
-        #     't_run', 'env', 'no_task', 'config', 'acc_speed', 'peak_task',
-
-        #     '分配需求比_need', '分配需求比标准差_need',
-        #     '使用分配比_need', '使用分配比标准差_need',
-        #     '有效使用率_need', '有效使用率_标准差_need',
-            
-        #     '分配需求比_alloc', '分配需求比标准差_alloc',
-        #     '使用分配比_alloc', '使用分配比标准差_alloc',
-        #     '有效使用率_alloc', '有效使用率_标准差_alloc',
-
-        #     'yield', 'goodput',
-        #     'need_beg', 'need_len', 'alloc_len'
-        # ])+'\n')
-        # for res in res_li:
-        #     r = res.get()
-        #     if r == 0:
-        #         continue
-        #     print(r)
-        #     f.write(r+'\n')

@@ -16,7 +16,7 @@ time_interval = 100 * 1000 * 1000
 
 def check_noise(message_id):
     message_id >>= 40
-    return (message_id >> 19) == 1
+    return (message_id >> 22) == 1
 
 
 def check_warm(message_id):
@@ -134,6 +134,8 @@ def load_log_beg_time(dir):
                     msg_id = msg_id_dot2int(items[4])
                 else:
                     msg_id = int(items[4])
+                if get_location(msg_id) != 2 and get_location(msg_id) != 1: 
+                    continue
                 time = int(items[3])
                 if time == -6795364578871345152:
                     continue
