@@ -1,6 +1,6 @@
 source venv/bin/activate
 
-FILE_NAME=an_ua_eu_en_entropy_v7
+FILE_NAME=an_ua_eu_en_entropy_v7_1
 DISK_PREFIXS=('/mnt/g' '/mnt/f' '/mnt/e')
 
 ROOTS=( \
@@ -20,6 +20,7 @@ ROOTS=( \
 
 print_header() {
     echo 't_run','env','no_task','no_real_task','config','acc_speed','peak_task',\
+'平均延迟_good','平均延迟_finished','吞吐率','平均延迟_all',\
 '平均使用核数_need','占用/需求_need','使用/占用_need','有效/使用_need','有效/需求_need',\
 '有效/使用_ne_need','有效/需求_ne_need',\
 '占用需求熵_need','占用需求熵_p_need',\
@@ -27,6 +28,10 @@ print_header() {
 '有效使用熵_need','有效使用熵_p_need',\
 '有效需求熵_need','有效需求熵_p_need',\
 '有效使用熵_ne_need','有效使用熵_ne_p_need',\
+'真有效使用分配熵_need','真有效使用分配熵_p_need',\
+'真有效使用总量熵_need','真有效使用总量熵_p_need',\
+'使用总量熵_need','使用总量熵_p_need',\
+'分配总量熵_need','分配总量熵_p_need',\
 '平均使用核数_alloc','占用/需求_alloc','使用/占用_alloc','有效/使用_alloc','有效/需求_alloc',\
 '有效/使用_ne_alloc','有效/需求_ne_alloc',\
 '占用需求熵_alloc','占用需求熵_p_alloc',\
@@ -34,6 +39,10 @@ print_header() {
 '有效使用熵_alloc','有效使用熵_p_alloc',\
 '有效需求熵_alloc','有效需求熵_p_alloc',\
 '有效使用熵_ne_alloc','有效使用熵_ne_p_alloc',\
+'真有效使用分配熵_alloc','真有效使用分配熵_p_alloc',\
+'真有效使用总量熵_alloc','真有效使用总量熵_p_alloc',\
+'使用总量熵_alloc','使用总量熵_p_alloc',\
+'分配总量熵_alloc','分配总量熵_p_alloc',\
 '平均使用核数_comp','占用/需求_comp','使用/占用_comp','有效/使用_comp','有效/需求_comp',\
 '有效/使用_ne_comp','有效/需求_ne_comp',\
 '占用需求熵_comp','占用需求熵_p_comp',\
@@ -41,6 +50,10 @@ print_header() {
 '有效使用熵_comp','有效使用熵_p_comp',\
 '有效需求熵_comp','有效需求熵_p_comp',\
 '有效使用熵_ne_comp','有效使用熵_ne_p_comp',\
+'真有效使用分配熵_comp','真有效使用分配熵_p_comp',\
+'真有效使用总量熵_comp','真有效使用总量熵_p_comp',\
+'使用总量熵_comp','使用总量熵_p_comp',\
+'分配总量熵_comp','分配总量熵_p_comp',\
 'yield','yield_machine','goodput',\
 'need_beg','need_len','alloc_len','comp_len' | tee $1
 }
@@ -89,6 +102,7 @@ do
     done
 done
 
+exit 0
 ## ====== NOISE =====
 
 ROOTS=( \
