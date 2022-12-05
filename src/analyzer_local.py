@@ -1,16 +1,15 @@
-
 from typing import List
-
 import requests
 from src.message import Message, MessageType
 from src.idutils import message_id
+from src.zmqutils import send
 from src.fileutils import save_logs
-
+import threading
 from datetime import datetime, timedelta
 import os
 
 FULL = (1 << 8) - 1
-TOTAL = 3185280
+TOTAL = 256000
 
 
 class Analyzer:
@@ -25,10 +24,10 @@ class Analyzer:
         self.last_time = last_time
 
         init_addr_name()
-    def task_character_ana(self, prefix):
+    def fake_run(self, prefix):
+        print("fake_run")
         global TOTAL
         TOTAL = int(prefix.split("-")[-1])
-        print("fake_run")
         files = os.listdir(prefix)
         log_data = dict()
         for file in files:
@@ -39,49 +38,16 @@ class Analyzer:
             logs = open(path).readlines()
             add_logs(url, logs, log_data, self.last_time)
         log_data_sorted = sort_logs(log_data)
-        # print_logs(prefix, "log.txt", log_data_sorted)
-        task_character_ana(log_data_sorted, prefix)
 
-    def parse_log(self, log_dirpath):
-        log_data = dict()
-        files = os.listdir(log_dirpath)
-        for file in files:
-            url = "http://"+file.replace("-",":").replace(".txt", "")
-            if not url in self.servers:
-                continue
-            path = os.path.join(log_dirpath, file)
-            logs = open(path).readlines()
-            add_logs(url, logs, log_data, self.last_time)
-        log_data_sorted = sort_logs(log_data)
-        return log_data_sorted
-
-    def fake_run(self, prefix):
-        global TOTAL
-        TOTAL = int(prefix.split("-")[-1])
-        print("fake_run")
-
-        log_data_sorted = load_logs(prefix, "log.txt")
-        if log_data_sorted == None:
-            files = os.listdir(prefix)
-            log_data = dict()
-            for file in files:
-                url = "http://"+file.replace("-",":").replace(".txt", "")
-                if not url in self.servers:
-                    continue
-                path = os.path.join(prefix, file)
-                logs = open(path).readlines()
-                add_logs(url, logs, log_data, self.last_time)
-            log_data_sorted = sort_logs(log_data)
-            print_logs(prefix, "log.txt", log_data_sorted)
-
+        print_logs(prefix, "log.txt", log_data_sorted)
         proof = proof_data()
         proof.timestamp = datetime.now() + timedelta(hours=8)
         if self.env == "net":
-            analyze_quality_net_v2_all(log_data_sorted, proof, prefix)
+            analyze_quality_net_v2(log_data_sorted, proof, prefix)
             save_proof_csv(prefix, proof, "src/net_base.png")
             draw_proof(prefix, proof, "src/net_base.png")
         elif self.env == "spb":
-            analyze_quality_spb_v2_all(log_data_sorted, proof, prefix)
+            analyze_quality_spb_v2(log_data_sorted, proof, prefix)
             analyze_path(log_data_sorted, proof)
             save_proof_csv(prefix, proof, "src/spb_base.png")
             draw_proof(prefix, proof, "src/spb_base.png")
@@ -99,7 +65,6 @@ class Analyzer:
             # send(self.zmq_end, msg.to_bytes())
 
         return log_data_sorted[-1][1][-1].time
-    
     def run(self):
         now = datetime.now()
         prefix = "logs/{0:04d}{1:02d}{2:02d}{3:02d}{4:02d}{5:02d}-{6}-{7:d}".format(
@@ -129,11 +94,11 @@ class Analyzer:
         proof.timestamp = datetime.now() + timedelta(hours=8)
 
         if self.env == "net":
-            analyze_quality_net_v2_all(log_data_sorted, proof, prefix)
+            analyze_quality_net_v2(log_data_sorted, proof, prefix)
             save_proof_csv(prefix, proof, "src/net_base.png")
             draw_proof(prefix, proof, "src/net_base.png")
         elif self.env == "spb":
-            analyze_quality_spb_v2_all(log_data_sorted, proof, prefix)
+            analyze_quality_spb_v2(log_data_sorted, proof, prefix)
             analyze_path(log_data_sorted, proof)
             save_proof_csv(prefix, proof, "src/spb_base.png")
             draw_proof(prefix, proof, "src/spb_base.png")
@@ -270,23 +235,8 @@ class event_log:
             log = "[" + time + "] └" + self.event.upper() + " " + self.logger
         log_with_send_recv = log + "  (" + self.send + " -> " + self.recv + ")"
         return log_with_send_recv
-    def load(self, s:str):
-        import re
-        if "┌" in  s:
-            # print("send")
-            self.event = "send"
-            pattern = "\[(.+)\] ┌SEND (.+)  \((.+) -> (.+)\)"
-        else:
-            # print("recv")
-            self.event = "recv"
-            pattern = "\[(.+)\] └RECV (.+)  \((.+) -> (.+)\)"
-        egex = re.compile(pattern)
-        g = egex.match(s)
-        res = g.groups()
-        self.time = load_time(res[0])
-        self.logger = res[1]
-        self.send = res[2]
-        self.recv = res[3]
+
+
 class proof_data:
     def __init__(self):
         self.real_nums = 0
@@ -306,18 +256,7 @@ class proof_data:
         self.BJ_machine2 = 0
         self.NJ_machine1 = 0
         self.NJ_machine2 = 0
-        self.NJ_good_ave_latency = 0 #nanjing good任务的平均延迟
-        self.BJ_good_ave_latency = 0 #beijing good任务的平均延迟
-        self.NJ_finished_ave_latency = 0 #nanjing 所有完成的任务的平均延迟
-        self.BJ_finished_ave_latency = 0 #beijing 所有完成的任务的平均延迟
-        self.NJ_all_ave_latency = 0 #nanjing 所有任务的平均延迟
-        self.BJ_all_ave_latency = 0 #beijing 所有任务的平均延迟
-        
-        self.average_good_latency = 0
-        self.average_finished_latency = 0
-        self.average_all_latency = 0
-        self.throughput = 0
-        
+
     def print_proof(self):
         print(self.timestamp)
         print("Number of Tasks: ", str(self.num_tasks))
@@ -416,15 +355,8 @@ def print_time(time):
     str_time = "(" + s2 + ")" + s1 + " s " + ms + " ms " + us + " us " + ns + " ns"
     # str_time = s1 + " s " + ms + " ms " + us + " us " + ns + " ns"
     return str_time
-def load_time(s: str):
-    import re
-    pattern = "\(([0-9]+?)\)([0-9]+?) s ([0-9]+?) ms ([0-9]+?) us ([0-9]+?) ns"
-    egex = re.compile(pattern)
-    x = egex.match(s)
-    t = 0
-    for i in x.groups():
-        t = t *1000+int(i)
-    return t
+
+
 def fetch_logs(filename):
     logs = []
     with open(filename, "r") as f:
@@ -438,7 +370,7 @@ def fetch_logs(filename):
 
 def add_logs(log_file, logs, log_data, last_time):
     for log in logs:
-        items = log.replace("\n", "").split(",")
+        items = log.split(",")
         if len(items) < 4 or int(items[3]) < last_time:
             continue
 
@@ -478,7 +410,10 @@ def load_logs_from_dir(dir, last_time):
                 continue
             logs.append(sp)
         add_logs("server", logs, log_data, last_time)
-    return sort_logs(log_data)
+    for msg_id in log_data:
+        log_data[msg_id].sort(key=lambda x: x.time)
+    return log_data.items()
+    # return sort_logs(log_data)
 
 
 def sort_logs(log_data):
@@ -504,67 +439,7 @@ def print_logs(prefix, filename, log_data_sorted):
         print("-----------------------\n", file=f)
     f.close()
 
-def load_logs(prefix, filename) -> list:
-    if not os.path.exists(prefix + "/" + filename):
-        return None
-    # import time
-    # recent = time.strptime("2022-11-13 00:00:00", "%Y-%m-%d %H:%M:%S")
-    # t =  os.path.getmtime(prefix + "/" + filename)
-    # if t > time.mktime(recent): 
-    #     print(os.getpid(), '====> log file may not correct', prefix + "/" + filename)
-    #     return  None
-    print("use old log file", prefix + "/" + filename)
-    log_data_sorted = []
-    def load_msg_id(s:str)->int:
-        import re
-        pattern = "Message ID .+ \(([0-9]+)\) #Record="
-        egex = re.compile(pattern)
-        g = egex.match(s)
-        res = g.groups()
-        return int(res[0])
 
-    f = open(prefix + "/" + filename, "r", encoding="utf-8")
-    # lines = f.readlines()
-    print("old log file load finish", prefix + "/" + filename)
-    logs = [0,[]]
-    first_line = True
-    next = False
-    # total_length = len(lines)
-    current_length = 0
-    while True:
-        line = f.readline()
-        if line == "":
-            break
-        current_length += 1
-        if current_length & 0b111111111111111111 == 0:
-            print(prefix, current_length)
-        if first_line:
-            if len(line) <=10:
-                continue
-            message_id = load_msg_id(line)
-            # print(message_id)
-            # exit(0)
-            first_line = False
-            logs[0] = message_id
-            continue
-        if "----------" in line:
-            # print("----------")
-            log_data_sorted.append(logs)
-            logs = [0,[]]
-            next = True
-            continue
-        if next:
-            next = False
-            first_line = True
-            continue
-        
-        # print(line)
-        elog = event_log()
-        elog.load(line)
-        
-        logs[1].append(elog)
-    f.close()
-    return log_data_sorted
 # ------------------------------------------------------------
 
 SPB_LEN = 14
@@ -631,99 +506,6 @@ def list_good_task_spb(log_data_sorted):
     print("100ms", pos_1_100, pos_2_100)
     print("total", pos_1_all, pos_2_all)
 
-
-# def task_character_ana(log_data_sorted, prefix):
-#     location_bits = (1<<20) -1
-#     # print(prefix)
-#     task_info_detail = {}
-#     for log_data_item in log_data_sorted:
-#         message_id = (log_data_item[0])>>40
-#         if message_id >> 22 == 1:  # 干扰消息
-#             continue
-#         if message_id <2:
-#             continue
-#         logs = log_data_item[1]
-#         location = (log_data_item[0] & location_bits)
-#         send_time = logs[0].time
-#         time_sec = send_time // 1000000
-#         index = 0
-#         m20bits = 1 << 18
-#         if location == 1:
-#             if message_id % 2 == 0:
-#                 index = 0
-#             if  message_id % 2 == 1:
-#                 index = 1 
-#         if location == 2:
-#             if  message_id & m20bits != 0:
-#                 index = 1
-#             else:
-#                 index = 0
-#         if task_info_detail.__contains__(time_sec):
-#             task_info_detail[time_sec][location][index] += 1
-#         else:
-#             task_info_detail[time_sec] = {1:[0,0], 2:[0,0]}
-#             task_info_detail[time_sec][location][index] += 1
-#     task_info_detail_list = []
-#     # print(task_info_detail)
-#     for time_sec in task_info_detail:
-#         task_info_detail_list.append([time_sec, task_info_detail[time_sec]])
-#     # task_info_detail_list.sort()
-
-#     f = open(os.path.join(prefix, "task_character.csv"), "w")
-#     for data in task_info_detail_list:
-#         f.write("%d, %d, %d, %d, %d\n"%(data[0]-1650217902900, data[1][1][0], data[1][1][1],  data[1][2][0],  data[1][2][1]))
-#     f.close()
-
-
-def task_character_ana(log_data_sorted, prefix):
-    location_bits = (1<<20) -1
-    # print(prefix)
-    task_info_detail = {}
-    for log_data_item in log_data_sorted:
-        message_id = (log_data_item[0])>>40
-        if message_id >> 22 == 1:  # 干扰消息
-            continue
-        if message_id <2:
-            continue
-        logs = log_data_item[1]
-        location = (log_data_item[0] & location_bits)
-        # print(len(logs))
-        if len(logs) < 3:
-            continue
-        send_time = logs[2].time
-        time_sec = send_time // 1000000
-        index = 0
-        m20bits = 1 << 18
-        if location == 1:
-            if message_id % 2 == 0:
-                index = 0
-            if  message_id % 2 == 1:
-                index = 1 
-        if location == 2:
-            if  message_id & m20bits != 0:
-                index = 1
-            else:
-                index = 0
-        if task_info_detail.__contains__(time_sec):
-            task_info_detail[time_sec][location][index] += 1
-        else:
-            task_info_detail[time_sec] = {1:[0,0], 2:[0,0]}
-            task_info_detail[time_sec][location][index] += 1
-    task_info_detail_list = []
-    # print(task_info_detail)
-    for time_sec in task_info_detail:
-        task_info_detail_list.append([time_sec, task_info_detail[time_sec]])
-    task_info_detail_list.sort()
-
-    f = open(os.path.join(prefix, "task_character.csv"), "w")
-    last_time = task_info_detail_list[0][0]
-    for data in task_info_detail_list:
-        for i in range(last_time+1, data[0]):
-            f.write("%d ,0 ,0\n"%(i-task_info_detail_list[0][0]))
-        f.write("%d, %d, %d\n"%(data[0]-task_info_detail_list[0][0], data[1][1][0]+data[1][1][1],  data[1][2][0]+data[1][2][1]))
-        last_time = data[0]
-    f.close()
-
 def analyze_quality_spb(log_data_sorted, proof):
     total = 0
     under_100 = 0
@@ -760,213 +542,6 @@ def analyze_quality_spb(log_data_sorted, proof):
     proof.goodput_50 = under_50 / total_time
     proof.goodput_20 = under_20 / total_time
 
-class latencyRecord:
-    def __init__(self) -> None:
-        self.finished_task_latency = 0
-        self.unfinished_task_start_time_sum = 0
-        self.unfinished_task_num = 0
-    def add_unfinished(self, start_time):
-        self.unfinished_task_start_time_sum += start_time
-        self.unfinished_task_num += 1
-    def add_finished(self,duration):
-        self.finished_task_latency +=duration
-    def total_latency(self, last_time):
-        return last_time * self.unfinished_task_num - self.unfinished_task_start_time_sum + self.finished_task_latency
-
-
-def analyze_quality_spb_v2_all(log_data_sorted, proof:proof_data, prefix):
-    total = 0
-    under_100 = 0
-    under_50 = 0
-    under_20 = 0
-
-    qos_100 = 0
-    qos_50 = 0
-    qos_20 = 0
-    qos_good_100 = 0
-    qos_good_50 = 0
-    qos_good_20 = 0
-    
-    qos_bj_100_good = 0
-    qos_bj_50_good = 0
-    qos_nj_100_good = 0
-    qos_nj_50_good = 0
-    qos_nj_20_good = 0
-    BJ_machine1_50_good = 0
-    BJ_machine2_50_good = 0
-
-    qos_bj_100 = 0
-    qos_bj_50 = 0
-    qos_nj_100 = 0
-    qos_nj_50 = 0
-    qos_nj_20 = 0
-    BJ_machine1_50 = 0
-    BJ_machine2_50 = 0
-    first_time = 0
-    last_time = 0
-    # id_bits = ((1<<22) -1) << 40
-    location_bits = (1<<20) -1
-    # print(log_data_sorted)
-    task_info_detail = []
-    finished_task_num = 0 # number of task finished
-    finished_task_total_latency = 0 #完成的任务的延迟的和
-    all_task_total_latency = latencyRecord() #所有任务的延迟的和 min(完成时间, 观测时间) - 提交时间
-    good_task_total_latency = 0 #good 任务的延迟的和
-    total_length = len(log_data_sorted)
-    current_length = 0
-    for log_data_item in log_data_sorted:
-        current_length += 1
-        if current_length & 0b11111111111111 == 0:
-            print(prefix, current_length / total_length *100,"%")
-        qos = 0
-        is_good = False
-        message_id = (log_data_item[0])>>40
-        # if message_id > 10000:
-        #     print(message_id)
-        b= (log_data_item[0] >> 20) & ((1 << 20) - 1)
-        if b <= 3: #非物端任务
-            continue
-        if message_id >> 23 == 1:  # 干扰消息
-            # print("hshsh")
-            continue
-        if message_id >> 22 == 1:  # 干扰消息
-            continue
-        if message_id <2:
-            continue
-        location = (log_data_item[0] & location_bits)
-        if location == 1:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 2 == 1:
-                qos_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 4 == 1:
-                qos_50 += 1
-            if  message_id % 4 == 3:
-                qos_20 += 1
-               
-        logs:list[event_log] = log_data_item[1]
-        if len(logs) != SPB_LEN:
-            # for log in logs:
-            #     print(log.string())
-           
-            index = min(SPB_START_IDX, len(logs)-1)  
-            all_task_total_latency.add_unfinished(logs[index].time)
-            continue
-        finished_task_num += 1
-        if first_time == 0:
-            first_time = logs[SPB_START_IDX].time
-        total += 1
-        duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
-        last_time = logs[SPB_END_IDX].time
-        finished_task_total_latency += duration
-        all_task_total_latency.add_finished(duration)
-        if duration < 100000000:
-            under_100 += 1
-        if duration < 50000000:
-            under_50 += 1
-        if duration < 20000000:
-            under_20 += 1
-        is_BJ_machine1 = False
-        is_BJ_machine2 = False
-
-        for i in range(14):
-            if logs[i].logger == "BJ-Machn-0":
-                is_BJ_machine1 = True
-                break
-            elif logs[i].logger == "BJ-Machn-1":
-                is_BJ_machine2 = True
-                break
-           
-        
-        if location == 1:
-            if message_id % 2 == 0:
-                qos=100000000
-                if duration < 100000000:
-                    qos_good_100 += 1
-                    is_good=True
-                    qos_bj_100_good += 1
-                qos_bj_100 += 1
-            if  message_id % 2 == 1:
-                qos=50000000
-                if duration < 50000000:
-                    qos_good_50 += 1
-                    is_good=True
-                    qos_bj_50_good += 1
-                    if is_BJ_machine1:
-                        BJ_machine1_50_good += 1
-                    else:
-                        BJ_machine2_50_good += 1
-                qos_bj_50 += 1
-                if is_BJ_machine1:
-                    BJ_machine1_50 += 1
-                else:
-                    BJ_machine2_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos=100000000
-                if duration < 100000000:
-                    qos_good_100 += 1
-                    is_good=True
-                    qos_nj_100_good += 1
-                qos_nj_100 += 1
-            if  message_id % 4 == 1:
-                qos=50000000
-                if duration < 50000000:
-                    qos_good_50 += 1
-                    is_good=True
-                    qos_nj_50_good += 1
-                qos_nj_50 += 1
-            if  message_id % 4 == 3:
-                qos=20000000
-                if duration < 20000000:
-                    qos_good_20 += 1
-                    is_good=True
-                    qos_nj_20_good += 1
-                qos_nj_20 += 1
-        if is_good:
-            good_task_total_latency += duration
-        task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
-    task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))        
-    print("SPB Number/finished: ", total, finished_task_num)
-    print("Qos 100: ", qos_100)
-    print("Qos 50: ", qos_50)
-    print("Qos 20: ", qos_20)
-    print("Qos good 100: ", qos_good_100, qos_good_100/qos_100)
-    print("Qos good 50: ", qos_good_50, qos_good_50/qos_50)
-    print("Qos good 20: ", qos_good_20, qos_good_20/ qos_20)
-    print("Qos total: ", qos_good_100+qos_good_50+qos_good_20, (qos_good_100+qos_good_50+qos_good_20) / (qos_100+qos_50+qos_20))
-    print("under 100: ", under_100)
-    print("under 50: ", under_50)
-    print("under 20: ", under_20)
-    # print(qos_bj_100_good, qos_bj_50_good ,qos_nj_100_good, qos_nj_50_good, qos_nj_20_good)
-    # print(qos_bj_100, qos_bj_50 ,qos_nj_100, qos_nj_50, qos_nj_20)
-    # print(BJ_machine1_50, BJ_machine1_50_good)
-    # print(BJ_machine2_50, BJ_machine2_50_good)
-    total = TOTAL
-    proof.real_nums = total
-    proof.num_tasks = total
-    proof.average_finished_latency = finished_task_total_latency / finished_task_num
-    # proof.yield_100 = qos_good_100 / qos_100
-    # proof.yield_50 = qos_good_50 / qos_50
-    # proof.yield_20 = qos_good_20 / qos_20
-    all = qos_100+qos_50+qos_20
-    proof.average_good_latency = good_task_total_latency / all
-    proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all 
-    total_time = (last_time - first_time) * 1. / 1000000000
-
-    proof.average_all_latency = all_task_total_latency.total_latency(last_time) / total
-    print(all_task_total_latency.unfinished_task_num, all_task_total_latency.unfinished_task_start_time_sum)
-    print("all latency/finished latency", proof.average_all_latency, proof.average_finished_latency)
-    proof.goodput_100 = qos_good_100 / total_time
-    proof.goodput_50 = qos_good_50 / total_time
-    proof.goodput_20 = qos_good_20 / total_time
-    proof.throughput = finished_task_num / total_time
-
 def analyze_quality_spb_v2(log_data_sorted, proof, prefix):
     total = 0
     under_100 = 0
@@ -980,181 +555,14 @@ def analyze_quality_spb_v2(log_data_sorted, proof, prefix):
     qos_good_50 = 0
     qos_good_20 = 0
     
-    qos_bj_100_good = 0
-    qos_bj_50_good = 0
-    qos_nj_100_good = 0
-    qos_nj_50_good = 0
-    qos_nj_20_good = 0
-    BJ_machine1_50_good = 0
-    BJ_machine2_50_good = 0
-
-    qos_bj_100 = 0
-    qos_bj_50 = 0
-    qos_nj_100 = 0
-    qos_nj_50 = 0
-    qos_nj_20 = 0
-    BJ_machine1_50 = 0
-    BJ_machine2_50 = 0
     first_time = 0
     last_time = 0
-    # id_bits = ((1<<22) -1) << 40
+    id_bits = ((1<<20) -1) << 40
     location_bits = (1<<20) -1
     # print(log_data_sorted)
+    m20bits = 1 << 17
+    m100bits = 1<<18
     task_info_detail = []
-    for log_data_item in log_data_sorted:
-        qos = 0
-        is_good = False
-        message_id = (log_data_item[0])>>40
-        # if message_id > 10000:
-        #     print(message_id)
-        if message_id >> 23 == 1:  # 干扰消息
-            # print("hshsh")
-            continue
-        if message_id >> 22 == 1:  # 干扰消息
-            continue
-        if message_id <2:
-            continue
-        location = (log_data_item[0] & location_bits)
-        if location == 1:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 2 == 1:
-                qos_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 4 == 1:
-                qos_50 += 1
-            if  message_id % 4 == 3:
-                qos_20 += 1
-               
-        logs = log_data_item[1]
-        if len(logs) != SPB_LEN:
-            # print(logs)
-            continue
-        if first_time == 0:
-            first_time = logs[SPB_START_IDX].time
-        total += 1
-        duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
-        last_time = logs[SPB_END_IDX].time
-        if duration < 100000000:
-            under_100 += 1
-        if duration < 50000000:
-            under_50 += 1
-        if duration < 20000000:
-            under_20 += 1
-        is_BJ_machine1 = False
-        is_BJ_machine2 = False
-
-        for i in range(14):
-            if logs[i].logger == "BJ-Machn-0":
-                is_BJ_machine1 = True
-                break
-            elif logs[i].logger == "BJ-Machn-1":
-                is_BJ_machine2 = True
-                break
-           
-        
-        if location == 1:
-            if message_id % 2 == 0:
-                qos=100000000
-                if duration < 100000000:
-                    qos_good_100 += 1
-                    is_good=True
-                    qos_bj_100_good += 1
-                qos_bj_100 += 1
-            if  message_id % 2 == 1:
-                qos=50000000
-                if duration < 50000000:
-                    qos_good_50 += 1
-                    is_good=True
-                    qos_bj_50_good += 1
-                    if is_BJ_machine1:
-                        BJ_machine1_50_good += 1
-                    else:
-                        BJ_machine2_50_good += 1
-                qos_bj_50 += 1
-                if is_BJ_machine1:
-                    BJ_machine1_50 += 1
-                else:
-                    BJ_machine2_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos=100000000
-                if duration < 100000000:
-                    qos_good_100 += 1
-                    is_good=True
-                    qos_nj_100_good += 1
-                qos_nj_100 += 1
-            if  message_id % 4 == 1:
-                qos=50000000
-                if duration < 50000000:
-                    qos_good_50 += 1
-                    is_good=True
-                    qos_nj_50_good += 1
-                qos_nj_50 += 1
-            if  message_id % 4 == 3:
-                qos=20000000
-                if duration < 20000000:
-                    qos_good_20 += 1
-                    is_good=True
-                    qos_nj_20_good += 1
-                qos_nj_20 += 1
-        task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
-    task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))        
-    print("SPB Number: ", total)
-    print("Qos 100: ", qos_100)
-    print("Qos 50: ", qos_50)
-    print("Qos 20: ", qos_20)
-    print("Qos good 100: ", qos_good_100, qos_good_100/qos_100)
-    print("Qos good 50: ", qos_good_50, qos_good_50/qos_50)
-    print("Qos good 20: ", qos_good_20, qos_good_20/ qos_20)
-    print("Qos total: ", qos_good_100+qos_good_50+qos_good_20, (qos_good_100+qos_good_50+qos_good_20) / (qos_100+qos_50+qos_20))
-    print("under 100: ", under_100)
-    print("under 50: ", under_50)
-    print("under 20: ", under_20)
-    print(qos_bj_100_good, qos_bj_50_good ,qos_nj_100_good, qos_nj_50_good, qos_nj_20_good)
-    print(qos_bj_100, qos_bj_50 ,qos_nj_100, qos_nj_50, qos_nj_20)
-    print(BJ_machine1_50, BJ_machine1_50_good)
-    print(BJ_machine2_50, BJ_machine2_50_good)
-    total = TOTAL
-    proof.real_nums = total
-    proof.num_tasks = total
-    # proof.yield_100 = qos_good_100 / qos_100
-    # proof.yield_50 = qos_good_50 / qos_50
-    # proof.yield_20 = qos_good_20 / qos_20
-    all = max(total/ 10,  qos_100+qos_50+qos_20)
-    proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all 
-    total_time = (last_time - first_time) * 1. / 1000000000
-    proof.goodput_100 = qos_good_100 / total_time
-    proof.goodput_50 = qos_good_50 / total_time
-    proof.goodput_20 = qos_good_20 / total_time
-  
-def analyze_quality_spb_v3(log_data_sorted, proof, prefix):
-    total = 0
-    under_100 = 0
-    under_50 = 0
-    under_20 = 0
-
-    qos_100 = 0
-    qos_50 = 0
-    qos_20 = 0
-    qos_good_100 = 0
-    qos_good_50 = 0
-    qos_good_20 = 0
-    
-    first_time = 0
-    last_time = 0
-    id_bits = ((1<<22) -1) << 40
-    location_bits = (1<<20) -1
-    # print(log_data_sorted)
-    m20bits = 1 << 18
-    task_info_detail = []
-
-    qos_20_detail = []
-    task_exec_times = []
     for log_data_item in log_data_sorted:
         qos = 0
         is_good = False
@@ -1165,7 +573,7 @@ def analyze_quality_spb_v3(log_data_sorted, proof, prefix):
             continue
         location = (log_data_item[0] & location_bits)
 
-        logs:list[event_log] = log_data_item[1]
+        logs = log_data_item[1]
         if len(logs) != SPB_LEN:
             # print(logs)
             continue
@@ -1174,10 +582,6 @@ def analyze_quality_spb_v3(log_data_sorted, proof, prefix):
         total += 1
         duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
         last_time = logs[SPB_END_IDX].time
-
-        exec_time = logs[SPB_START_IDX+7].time - logs[SPB_START_IDX+6].time
-        task_exec_times.append("%ld, %d, %s\n"%(logs[SPB_START_IDX].time, exec_time, logs[SPB_END_IDX-1].logger))
-
         if duration < 100000000:
             under_100 += 1
         if duration < 50000000:
@@ -1201,7 +605,6 @@ def analyze_quality_spb_v3(log_data_sorted, proof, prefix):
             if  message_id & m20bits != 0:
                 qos=20000000
                 qos_20 += 1
-                qos_20_detail.append("%ld, %d, %s\n"%(logs[SPB_START_IDX].time, duration, logs[SPB_END_IDX-1].logger))
                 if duration < 20000000:
                     qos_good_20 += 1
                     is_good=True
@@ -1213,16 +616,6 @@ def analyze_quality_spb_v3(log_data_sorted, proof, prefix):
                     is_good=True
         task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
     task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))        
-    
-    f = open(os.path.join(prefix, "task_exec_times.csv"), "w")
-    for data in task_exec_times:
-        f.write(data)
-    f.close()
-    
-    f = open(os.path.join(prefix, "qos_20_detail.csv"), "w")
-    for data in qos_20_detail:
-        f.write(data)
-    f.close()
     print("Number: ", total)
     print("Qos 100: ", qos_100)
     print("Qos 50: ", qos_50)
@@ -1245,9 +638,8 @@ def analyze_quality_spb_v3(log_data_sorted, proof, prefix):
     proof.goodput_100 = qos_good_100 / total_time
     proof.goodput_50 = qos_good_50 / total_time
     proof.goodput_20 = qos_good_20 / total_time
-
-#保质要求1秒 500ms 200ms 测试长时间任务
-def analyze_quality_spb_v4(log_data_sorted, proof, prefix):
+  
+def analyze_quality_spb_v3(log_data_sorted, proof, prefix):
     total = 0
     under_100 = 0
     under_50 = 0
@@ -1262,9 +654,11 @@ def analyze_quality_spb_v4(log_data_sorted, proof, prefix):
     
     first_time = 0
     last_time = 0
-    id_bits = ((1<<22) -1) << 40
+    id_bits = ((1<<20) -1) << 40
     location_bits = (1<<20) -1
     # print(log_data_sorted)
+    m20bits = 1 << 17
+    m100bits = 1<<18
     task_info_detail = []
     for log_data_item in log_data_sorted:
         qos = 0
@@ -1275,19 +669,7 @@ def analyze_quality_spb_v4(log_data_sorted, proof, prefix):
         if message_id <2:
             continue
         location = (log_data_item[0] & location_bits)
-        if location == 1:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 2 == 1:
-                qos_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 4 == 1:
-                qos_50 += 1
-            if  message_id % 4 == 3:
-                qos_20 += 1
-               
+
         logs = log_data_item[1]
         if len(logs) != SPB_LEN:
             # print(logs)
@@ -1297,38 +679,37 @@ def analyze_quality_spb_v4(log_data_sorted, proof, prefix):
         total += 1
         duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
         last_time = logs[SPB_END_IDX].time
-        if duration < 2000000000:
+        if duration < 100000000:
             under_100 += 1
-        if duration < 1000000000:
+        if duration < 50000000:
             under_50 += 1
-        if duration < 400000000:
+        if duration < 20000000:
             under_20 += 1
         if location == 1:
             if message_id % 2 == 0:
-                qos=2000000000
-                if duration < 2000000000:
+                qos=100000000
+                qos_100 += 1
+                if duration < 100000000:
                     qos_good_100 += 1
                     is_good=True
             if  message_id % 2 == 1:
-                qos=1000000000
-                if duration < 1000000000:
+                qos=50000000
+                qos_50 += 1
+                if duration < 50000000:
                     qos_good_50 += 1
                     is_good=True
         if location == 2:
-            if message_id % 2 == 0:
-                qos=2000000000
-                if duration < 2000000000:
-                    qos_good_100 += 1
-                    is_good=True
-            if  message_id % 4 == 1:
-                qos=1000000000
-                if duration < 1000000000:
-                    qos_good_50 += 1
-                    is_good=True
-            if  message_id % 4 == 3:
-                qos=400000000
-                if duration < 400000000:
+            if  message_id & m20bits != 0:
+                qos=20000000
+                qos_20 += 1
+                if duration < 20000000:
                     qos_good_20 += 1
+                    is_good=True
+            else:
+                qos=100000000
+                qos_100 += 1
+                if duration < 100000000:
+                    qos_good_100 += 1
                     is_good=True
         task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
     task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))        
@@ -1354,7 +735,7 @@ def analyze_quality_spb_v4(log_data_sorted, proof, prefix):
     proof.goodput_100 = qos_good_100 / total_time
     proof.goodput_50 = qos_good_50 / total_time
     proof.goodput_20 = qos_good_20 / total_time
- 
+  
 
 NET_LEN_1 = 8
 NET_LEN_2 = 6
@@ -1497,167 +878,6 @@ def task_info_detail_to_csv(tasks_info_detail:List, period, path):
 
 
         
-def analyze_quality_net_v2_all(log_data_sorted, proof:proof_data, prefix):
-    total = 0
-    under_100 = 0
-    under_50 = 0
-    under_20 = 0
-
-    qos_100 = 0
-    qos_50 = 0
-    qos_20 = 0
-    qos_good_100 = 0
-    qos_good_50 = 0
-    qos_good_20 = 0
-    
-    first_time = 0
-    last_time = 0
-    id_bits = ((1<<22) -1) << 40
-    location_bits = (1<<20) -1
-
-    # valid_logs = list_valid_logs_net(log_data_sorted)
-    task_info_detail = []
-    num_in_thing = 0
-    log_msdID = {}
-    finished_task_num = 0 # number of task finished
-    finished_task_total_latency = 0 #完成的任务的延迟的和
-    good_task_total_latency = 0 #good 任务的延迟的和
-    all_task_total_latency = latencyRecord() #所有任务的延迟的和 min(完成时间, 观测时间) - 提交时间
-
-    total_length = len(log_data_sorted)
-    current_length = 0
-    for log_data_item in log_data_sorted:
-        current_length += 1
-        if current_length & 0b11111111111111 == 0:
-            print(prefix, current_length / total_length *100,"%")
-        is_good = False
-        qos = 0
-        message_id = (log_data_item[0])>>40
-        # if message_id % 100 < 20 or message_id % 100 > 30:
-            # print("message_id % 100 < 20 or message_id % 100 > 30", message_id)
-        # log_msdID[message_id] = 1
-            # continue
-        if message_id >> 23 == 1:  # 干扰消息
-            continue
-        if message_id >> 22 == 1:  # 干扰消息
-            continue
-        if message_id <2:
-            continue
-        log_msdID[message_id] = 1
-            # exit(0)
-        location = (log_data_item[0] & location_bits)
-        if location == 1:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 2 == 1:
-                qos_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 4 == 1:
-                qos_50 += 1
-            if  message_id % 4 == 3:
-                qos_20 += 1
-        logs = log_data_item[1]
-        ll = len(logs)
-        if ll != NET_LEN_1 and ll != NET_LEN_2:
-            index = min(NET_START_IDX, len(logs)-1)  
-            all_task_total_latency.add_unfinished(logs[index].time)
-            continue
-
-        if ll <= NET_START_IDX:
-            if ll == 1:
-                num_in_thing += 1
-            index = min(NET_START_IDX, len(logs)-1)  
-            all_task_total_latency.add_unfinished(logs[index].time)
-            continue
-        if first_time == 0:
-            first_time = logs[NET_START_IDX].time
-        elif logs[NET_START_IDX].time < first_time:
-            first_time = logs[NET_START_IDX].time
-        finished_task_num += 1
-        total += 1
-        if ll == NET_LEN_1:
-            duration = logs[NET_END_IDX_1].time - logs[NET_START_IDX].time
-            last_time = logs[NET_END_IDX_1].time
-        else:
-            duration = logs[NET_END_IDX_2].time - logs[NET_START_IDX].time
-            last_time = logs[NET_END_IDX_2].time
-        finished_task_total_latency += duration
-        all_task_total_latency.add_finished(duration)
-        if duration < 100000000:
-            under_100 += 1
-        if duration < 50000000:
-            under_50 += 1
-        if duration < 20000000:
-            under_20 += 1
-        if location == 1:
-            if message_id % 2 == 0:
-                qos = 100000000
-                if duration < 100000000:
-                    qos_good_100 += 1
-                    is_good = True
-                    
-            if  message_id % 2 == 1:
-                qos = 50000000
-                if duration < 50000000:
-                    qos_good_50 += 1
-                    is_good = True
-        if location == 2:
-            if message_id % 2 == 0:
-                qos = 100000000
-                if duration < 100000000:
-                    qos_good_100 += 1
-                    is_good = True
-            if  message_id % 4 == 1:
-                qos = 50000000
-                if duration < 50000000:
-                    qos_good_50 += 1
-                    is_good = True
-            if  message_id % 4 == 3:
-                qos = 20000000
-                if duration < 20000000:
-                    qos_good_20 += 1
-                    is_good = True
-        if is_good:
-            good_task_total_latency += duration
-        task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
-    task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))
-    # print("num_in_thing: ", num_in_thing)
-    # print(log_msdID)
-    print("Number: ", total)
-    # print("Qos 100: ", qos_100)
-    # print("Qos 50: ", qos_50)
-    # print("Qos 20: ", qos_20)
-    # print("Qos good 100: ", qos_good_100, qos_good_100/qos_100)
-    # print("Qos good 50: ", qos_good_50, qos_good_50/qos_50)
-    # print("Qos good 20: ", qos_good_20, qos_good_20/ qos_20)
-    # print("Qos total: ", qos_good_100+qos_good_50+qos_good_20, (qos_good_100+qos_good_50+qos_good_20) / (qos_100+qos_50+qos_20))
-    # print("under 100: ", under_100)
-    # print("under 50: ", under_50)
-    # print("under 20: ", under_20)
-
-    total = TOTAL
-    proof.real_nums = total
-    proof.num_tasks = total
-    proof.average_finished_latency= finished_task_total_latency / finished_task_num
-    # proof.yield_100 = qos_good_100 / qos_100
-    # proof.yield_50 = qos_good_50 / qos_50
-    # proof.yield_20 = qos_good_20 / qos_20
-
-    all =  qos_100+qos_50+qos_20
-    proof.average_good_latency = good_task_total_latency / all
-    proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all
-    total_time = (last_time - first_time) * 1. / 1000000000
-    proof.average_all_latency =  all_task_total_latency.total_latency(last_time) / total
-    print("-----", all, total, total_time, qos_good_100+qos_good_50+qos_good_20, qos_100+qos_50+qos_20)
-    proof.goodput_100 = qos_good_100 / total_time
-    proof.goodput_50 = qos_good_50 / total_time
-    proof.goodput_20 = qos_good_20 / total_time
-    proof.throughput = finished_task_num / total_time
-
 
 def analyze_quality_net_v2(log_data_sorted, proof, prefix):
     total = 0
@@ -1674,42 +894,22 @@ def analyze_quality_net_v2(log_data_sorted, proof, prefix):
     
     first_time = 0
     last_time = 0
-    id_bits = ((1<<22) -1) << 40
+    id_bits = ((1<<20) -1) << 40
     location_bits = (1<<20) -1
 
     # valid_logs = list_valid_logs_net(log_data_sorted)
     task_info_detail = []
     num_in_thing = 0
-    log_msdID = {}
     for log_data_item in log_data_sorted:
         is_good = False
         qos = 0
-        message_id = (log_data_item[0])>>40
-        # if message_id % 100 < 20 or message_id % 100 > 30:
-            # print("message_id % 100 < 20 or message_id % 100 > 30", message_id)
-        # log_msdID[message_id] = 1
-            # continue
-        if message_id >> 23 == 1:  # 干扰消息
-            continue
-        if message_id >> 22 == 1:  # 干扰消息
+        message_id = (log_data_item[0] & id_bits)>>40
+        if message_id >> 19 == 1:  # 干扰消息
             continue
         if message_id <2:
             continue
-        log_msdID[message_id] = 1
-            # exit(0)
         location = (log_data_item[0] & location_bits)
-        if location == 1:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 2 == 1:
-                qos_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 4 == 1:
-                qos_50 += 1
-            if  message_id % 4 == 3:
-                qos_20 += 1
+
         logs = log_data_item[1]
         ll = len(logs)
         if ll != NET_LEN_1 and ll != NET_LEN_2:
@@ -1741,63 +941,61 @@ def analyze_quality_net_v2(log_data_sorted, proof, prefix):
         if location == 1:
             if message_id % 2 == 0:
                 qos = 100000000
+                qos_100 += 1
                 if duration < 100000000:
                     qos_good_100 += 1
                     is_good = True
                     
             if  message_id % 2 == 1:
                 qos = 50000000
+                qos_50 += 1
                 if duration < 50000000:
                     qos_good_50 += 1
                     is_good = True
         if location == 2:
             if message_id % 2 == 0:
                 qos = 100000000
+                qos_100 += 1
                 if duration < 100000000:
                     qos_good_100 += 1
                     is_good = True
             if  message_id % 4 == 1:
                 qos = 50000000
+                qos_50 += 1
                 if duration < 50000000:
                     qos_good_50 += 1
                     is_good = True
             if  message_id % 4 == 3:
                 qos = 20000000
+                qos_20 += 1
                 if duration < 20000000:
                     qos_good_20 += 1
                     is_good = True
         task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
     task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))
-    # print("num_in_thing: ", num_in_thing)
-    print(log_msdID)
+    print("num_in_thing: ", num_in_thing)
     print("Number: ", total)
-    # print("Qos 100: ", qos_100)
-    # print("Qos 50: ", qos_50)
-    # print("Qos 20: ", qos_20)
-    # print("Qos good 100: ", qos_good_100, qos_good_100/qos_100)
-    # print("Qos good 50: ", qos_good_50, qos_good_50/qos_50)
-    # print("Qos good 20: ", qos_good_20, qos_good_20/ qos_20)
-    # print("Qos total: ", qos_good_100+qos_good_50+qos_good_20, (qos_good_100+qos_good_50+qos_good_20) / (qos_100+qos_50+qos_20))
-    # print("under 100: ", under_100)
-    # print("under 50: ", under_50)
-    # print("under 20: ", under_20)
+    print("Qos 100: ", qos_100)
+    print("Qos 50: ", qos_50)
+    print("Qos 20: ", qos_20)
+    print("Qos good 100: ", qos_good_100, qos_good_100/qos_100)
+    print("Qos good 50: ", qos_good_50, qos_good_50/qos_50)
+    print("Qos good 20: ", qos_good_20, qos_good_20/ qos_20)
+    print("Qos total: ", qos_good_100+qos_good_50+qos_good_20, (qos_good_100+qos_good_50+qos_good_20) / (qos_100+qos_50+qos_20))
+    print("under 100: ", under_100)
+    print("under 50: ", under_50)
+    print("under 20: ", under_20)
 
     total = TOTAL
     proof.real_nums = total
     proof.num_tasks = total
-    # proof.yield_100 = qos_good_100 / qos_100
-    # proof.yield_50 = qos_good_50 / qos_50
-    # proof.yield_20 = qos_good_20 / qos_20
-
-    all = max(total / 10,  qos_100+qos_50+qos_20)
-    proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
-    proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all
+    proof.yield_100 = qos_good_100 / qos_100
+    proof.yield_50 = qos_good_50 / qos_50
+    proof.yield_20 = qos_good_20 / qos_20
     total_time = (last_time - first_time) * 1. / 1000000000
-    print("-----", all, total, total_time, qos_good_100+qos_good_50+qos_good_20, qos_100+qos_50+qos_20)
-    proof.goodput_100 = qos_good_100 / total_time * 10
-    proof.goodput_50 = qos_good_50 / total_time * 10
-    proof.goodput_20 = qos_good_20 / total_time * 10
+    proof.goodput_100 = qos_good_100 / total_time
+    proof.goodput_50 = qos_good_50 / total_time
+    proof.goodput_20 = qos_good_20 / total_time
 
 def analyze_quality_net_v3(log_data_sorted, proof, prefix):
     total = 0
@@ -1814,7 +1012,7 @@ def analyze_quality_net_v3(log_data_sorted, proof, prefix):
     
     first_time = 0
     last_time = 0
-    id_bits = ((1<<22) -1) << 40
+    id_bits = ((1<<20) -1) << 40
     location_bits = (1<<20) -1
 
     # valid_logs = list_valid_logs_net(log_data_sorted)
@@ -1912,140 +1110,13 @@ def analyze_quality_net_v3(log_data_sorted, proof, prefix):
     proof.goodput_50 = qos_good_50 / total_time
     proof.goodput_20 = qos_good_20 / total_time
 
-#保质要求1秒 500ms 200ms 测试长时间任务
-def analyze_quality_net_v4(log_data_sorted, proof, prefix):
-    total = 0
-    under_100 = 0
-    under_50 = 0
-    under_20 = 0
-
-    qos_100 = 0
-    qos_50 = 0
-    qos_20 = 0
-    qos_good_100 = 0
-    qos_good_50 = 0
-    qos_good_20 = 0
-    
-    first_time = 0
-    last_time = 0
-    id_bits = ((1<<22) -1) << 40
-    location_bits = (1<<20) -1
-
-    # valid_logs = list_valid_logs_net(log_data_sorted)
-    task_info_detail = []
-    num_in_thing = 0
-    for log_data_item in log_data_sorted:
-        is_good = False
-        qos = 0
-        message_id = (log_data_item[0] & id_bits)>>40
-        if message_id >> 19 == 1:  # 干扰消息
-            continue
-        if message_id <2:
-            continue
-        location = (log_data_item[0] & location_bits)
-        if location == 1:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 2 == 1:
-                qos_50 += 1
-        if location == 2:
-            if message_id % 2 == 0:
-                qos_100 += 1
-            if  message_id % 4 == 1:
-                qos_50 += 1
-            if  message_id % 4 == 3:
-                qos_20 += 1
-        logs = log_data_item[1]
-        ll = len(logs)
-        if ll != NET_LEN_1 and ll != NET_LEN_2:
-            continue
-
-        if ll <= NET_START_IDX:
-            if ll == 1:
-                num_in_thing += 1
-            continue
-        if first_time == 0:
-            first_time = logs[NET_START_IDX].time
-        elif logs[NET_START_IDX].time < first_time:
-            first_time = logs[NET_START_IDX].time
-        total += 1
-        if ll == NET_LEN_1:
-            duration = logs[NET_END_IDX_1].time - logs[NET_START_IDX].time
-            last_time = logs[NET_END_IDX_1].time
-        else:
-            duration = logs[NET_END_IDX_2].time - logs[NET_START_IDX].time
-            last_time = logs[NET_END_IDX_2].time
-
-        
-        if duration < 2000000000:
-            under_100 += 1
-        if duration < 1000000000:
-            under_50 += 1
-        if duration < 400000000:
-            under_20 += 1
-        if location == 1:
-            if message_id % 2 == 0:
-                qos = 2000000000
-                if duration < 2000000000:
-                    qos_good_100 += 1
-                    is_good = True
-                    
-            if  message_id % 2 == 1:
-                qos = 1000000000
-                if duration < 1000000000:
-                    qos_good_50 += 1
-                    is_good = True
-        if location == 2:
-            if message_id % 2 == 0:
-                qos = 2000000000
-                if duration < 2000000000:
-                    qos_good_100 += 1
-                    is_good = True
-            if  message_id % 4 == 1:
-                qos = 1000000000
-                if duration < 1000000000:
-                    qos_good_50 += 1
-                    is_good = True
-            if  message_id % 4 == 3:
-                qos = 400000000
-                if duration < 400000000:
-                    qos_good_20 += 1
-                    is_good = True
-        task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
-    task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))
-    print("num_in_thing: ", num_in_thing)
-    print("Number: ", total)
-    print("Qos 100: ", qos_100)
-    print("Qos 50: ", qos_50)
-    print("Qos 20: ", qos_20)
-    print("Qos good 100: ", qos_good_100, qos_good_100/qos_100)
-    print("Qos good 50: ", qos_good_50, qos_good_50/qos_50)
-    print("Qos good 20: ", qos_good_20, qos_good_20/ qos_20)
-    print("Qos total: ", qos_good_100+qos_good_50+qos_good_20, (qos_good_100+qos_good_50+qos_good_20) / (qos_100+qos_50+qos_20))
-    print("under 100: ", under_100)
-    print("under 50: ", under_50)
-    print("under 20: ", under_20)
-
-    total = TOTAL
-    proof.real_nums = total
-    proof.num_tasks = total
-    proof.yield_100 = qos_good_100 / qos_100
-    proof.yield_50 = qos_good_50 / qos_50
-    proof.yield_20 = qos_good_20 / qos_20
-    total_time = (last_time - first_time) * 1. / 1000000000
-    proof.goodput_100 = qos_good_100 / total_time
-    proof.goodput_50 = qos_good_50 / total_time
-    proof.goodput_20 = qos_good_20 / total_time
-
 def analyze_path(log_data_sorted, proof):
     for log_data_item in log_data_sorted:
         logs = log_data_item[1]
 
         if len(logs) != 14:
             continue
-        message_id = (log_data_item[0])>>40
-        if message_id >> 22 == 1:
-            continue
+
         for i in range(14):
             if logs[i].logger == "BJ-LocalSw":
                 proof.BJ_local += 1
@@ -2093,14 +1164,12 @@ def add_proof_csv(filename, env, proof):
         f.write(res_str)
 
 
-def save_proof_csv(prefix, proof:proof_data, base):
-    print("log----- save_proof_csv", "{}/result.csv".format(prefix))
+def save_proof_csv(prefix, proof, base):
     env = base.replace("src/", "").replace("_base.png", "")
-    res_str = "{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(
+    res_str = "{},{},{},{},{},{},{},{},{},{}\n".format(
         env, str(proof.timestamp), str(proof.num_tasks), str(proof.real_nums),
         proof.yield_100 * 100, proof.yield_50 * 100, proof.yield_20 * 100,
-        proof.goodput_100, proof.goodput_50, proof.goodput_20, proof.throughput, 
-        proof.average_finished_latency, proof.average_good_latency, proof.average_all_latency)
+        proof.goodput_100, proof.goodput_50, proof.goodput_20)
     with open("{}/result.csv".format(prefix), "w") as f:
         f.write(res_str)
     with open("{}/../result.csv".format(prefix), "a") as f:

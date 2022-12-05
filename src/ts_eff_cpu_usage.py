@@ -5,13 +5,30 @@
 # scp -P 10004 root@58.240.113.38:/home/yuzishu/taskswitching/NJ_M2/*.log worker_log/NJ_M2
 import json
 import os
+from re import sub
 import sys
 import pprint
+from calculate_need_usage_alloc import load_comp_ranges, get_mac_parent
+import hashlib
+from calculate_need import check_noise, check_warm, get_location, check_person, get_qos
 
 time_interval = 100 * 1000 * 1000
 
+def load_task_info(parent):
+    mac_parent = get_mac_parent(parent)
+    suffix = hashlib.md5(mac_parent.encode('utf-8')).hexdigest()[:6]
+    task_info_path = os.path.join(parent, f'task-info-{suffix}.csv')
+    task_infos = {}
+    with open(task_info_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            parts = line.split(',')
+            message_id = int(parts[0])
+            is_good = parts[4] == 'True'
+            task_infos[message_id] = is_good
+    return task_infos
 
-def analyze(path):
+def analyze(path, task_infos):
     files = os.listdir(path)
     total_time = 0
     number = 0
@@ -30,8 +47,11 @@ def analyze(path):
                 continue
             subID = int(log[0].split("_")[-1])
 
-            msg_ID = subID >> 40
-            if msg_ID == 1 or msg_ID == 2:
+            if check_noise(subID) or check_warm(subID) or check_person(subID):
+                continue
+
+            is_good = task_infos[subID]
+            if not is_good:
                 continue
 
             start_time = int(log[2])
@@ -62,7 +82,7 @@ def analyze(path):
 
     # print(os.path.basename(path))
     max_core = 0
-    f = open(os.path.join(os.path.dirname(path), os.path.basename(path) + "_analyze.csv"), "w")
+    f = open(os.path.join(os.path.dirname(path), os.path.basename(path) + "_eff_analyze.csv"), "w")
     for i in log_times:
         if log_times[i] > max_core:
             max_core = max(max_core, log_times[i])
@@ -73,16 +93,19 @@ def analyze(path):
     return log_times
 
 
-path = sys.argv[1]
+parent = sys.argv[1]
 interval = sys.argv[2]
 time_interval = int(interval) * 1000000
 
+task_infos = load_task_info(parent)
+
+path = os.path.join(parent, 'ts-cpu')
 dirs = ["BJ_M1", "BJ_M2", "NJ_M1", "NJ_M2"]
 log_times_total = {}
 log_times_total_detail = {}
 index = 0
 for dir in dirs:
-    log_times = analyze(os.path.join(path, dir))
+    log_times = analyze(os.path.join(path, dir), task_infos)
     for i in log_times:
         if log_times_total.__contains__(i):
             log_times_total[i] += log_times[i]
@@ -103,7 +126,7 @@ for i in log_times_total:
         min_core = min(min_core, log_times_total[i])
 
 # pprint.pprint(log_times_total)
-f = open(path + "/../ts_cpu_usage_{}ms.csv".format(interval), "w")
+f = open(path + "/../ts_eff_cpu_usage_{}ms.csv".format(interval), "w")
 keys = list(log_times_total_detail.keys())
 keys.sort()
 start = keys[0]

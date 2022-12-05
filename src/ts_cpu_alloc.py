@@ -60,6 +60,8 @@ def analyze(machine_task_duration, time_interval):
     log_times_total = {}
     log_times_total_detail = {}
     for idx, machine in enumerate(machines):
+        if not machine_task_duration.__contains__(machine):
+            continue
         log_times = cal_cpu_alloc(machine_task_duration[machine], time_interval)
         for i in log_times:
             if log_times_total.__contains__(i):
@@ -115,12 +117,13 @@ def filter_data(data, f):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("ts_cpu_alloc.py TS-CPU-DIR")
+        print("ts_cpu_alloc.py TS-LOG-DIR")
         exit(1)
 
     dir_path = sys.argv[1]
 
     log_data_sorted = load_logs_from_dir(dir_path, 0)
+    print(len(log_data_sorted))
     machine_task_duration = list_task_duration(log_data_sorted)
 
     print("cal ts cpu alloc 100ms ......")
@@ -138,14 +141,14 @@ if __name__ == '__main__':
     first_time = total_data_1ms[0][0]
 
     print("cal ts cpu alloc 20-20.5 ......")
-    data_20_20d5 = filter_data(total_data_1ms, lambda log: first_time + 20000 < log[0] < first_time + 20500)
-    print(len(data_20_20d5))
-    write_file(data_20_20d5, dir_path + "/../ts_cpu_alloc_20_20.5.csv")
-    summary2 = cal_summary(data_20_20d5)
+    # data_20_20d5 = filter_data(total_data_1ms, lambda log: first_time + 20000 < log[0] < first_time + 20500)
+    # print(len(data_20_20d5))
+    # write_file(data_20_20d5, dir_path + "/../ts_cpu_alloc_20_20.5.csv")
+    # summary2 = cal_summary(data_20_20d5)
 
     summary_file = open(dir_path + "/../ts_cpu_alloc_summary.csv", "w")
     summary_file.write("1ms," + ','.join(map(str, summary1)) + "\n")
-    summary_file.write("20_20.5," + ','.join(map(str, summary2)) + "\n")
+    # summary_file.write("20_20.5," + ','.join(map(str, summary2)) + "\n")
     summary_file.write("100ms," + ','.join(map(str, summary3)) + "\n")
     summary_file.close()
 

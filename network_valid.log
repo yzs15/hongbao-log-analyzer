@@ -1,0 +1,120 @@
+ 
+/mnt/g/logs-june-7-5-valid-all
+------------------
+/mnt/g/logs-june-7-5-valid-all/0706000646-net-362880-70-100-1C2C60%-1	2995.26.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706031502-net-1545600-150-100-1C2C60%-1	6934.30.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706041454-net-1969280-170-100-1C2C60%-1	17012.10.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706105600-net-851840-110-100-1C2C60%-1	2837.10.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706152210-spb-13440-10-100	2.20.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706153137-spb-78720-30-100	2.17.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706171529-spb-362880-70-100	2.6.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706173442-spb-581760-90-100	2.15.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706175745-spb-851840-110-100	2.42.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706182451-spb-1173120-130-100	2.21.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706185620-spb-1545600-150-100	2.28.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706193153-spb-1969280-170-100	2.38.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706201205-spb-2444160-190-100	2.15.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706205730-spb-2970240-210-100	2.11.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706214523-spb-3547520-230-100	2.16.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706224136-spb-7680-10-1000	2.20.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706225000-spb-26880-30-1000	2.11.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706225901-spb-51200-50-1000	2.12.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706230824-spb-80640-70-1000	2.28.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0706232742-spb-154880-110-1000	2.15.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706233823-spb-199680-130-1000	2.8.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0706234928-spb-249600-150-1000	2.32.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707000051-spb-304640-170-1000	2.39.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707001259-spb-364800-190-1000	2.5.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707002519-spb-430080-210-1000	2.38.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707003819-spb-500480-230-1000	2.17.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707005152-spb-195200-50-100	2.36.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707010720-spb-362880-70-100	2.17.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707014720-spb-851840-110-100	2.29.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707021426-spb-1173120-130-100	2.24.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707024532-spb-1545600-150-100	2.27.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707035409-spb-2444160-190-100	2.9.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707043930-spb-2970240-210-100	219.33.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707052954-spb-3547520-230-100	2.14.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707062550-spb-7680-10-1000	2.19.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707063400-spb-26880-30-1000	194.9.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707064303-spb-51200-50-1000	2.8.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707065208-spb-80640-70-1000	2.5.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707070144-spb-115200-90-1000	2.6.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707071143-spb-154880-110-1000	2.32.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707072211-spb-199680-130-1000	2.32.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707073243-spb-249600-150-1000	2.43.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707074404-spb-304640-170-1000	2.24.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707075613-spb-364800-190-1000	125.36.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707080843-spb-430080-210-1000	2.41.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707082131-spb-500480-230-1000	2.23.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707083500-spb-195200-50-100	2.4.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707085049-spb-362880-70-100	78.4.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707091013-spb-581760-90-100	2.19.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707093326-spb-851840-110-100	2.42.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707100014-spb-1173120-130-100	2.30.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707103145-spb-1545600-150-100	2.19.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707110724-spb-1969280-170-100	87.32.1	logs length equal to 11
+/mnt/g/logs-june-7-5-valid-all/0707114711-spb-2444160-190-100	2.6.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707235430-spb-256000 Not found log dirpath
+/mnt/g/logs-june-7-5-valid-all/0707123222-spb-2970240-210-100	2.6.1	communication time greater than 10s
+/mnt/g/logs-june-7-5-valid-all/0707173147-net-100-1C2C60%-1	2.5.1	logs length equal to 5
+ 
+/mnt/e/logs-june-6-29-valid-linear
+------------------
+/mnt/e/logs-june-6-29-valid-linear/0629204415-net-1173120-130-100-4C8C10%-1	4406.8.1	communication time greater than 10s
+/mnt/e/logs-june-6-29-valid-linear/0629213503-net-1545600-150-100-1C2C60%-1	7264.10.1	communication time greater than 10s
+/mnt/e/logs-june-6-29-valid-linear/0629221711-net-1969280-170-100-1C2C60%-1	2858.26.1	communication time greater than 10s
+/mnt/e/logs-june-6-29-valid-linear/0630183654-net-3949440-110-20-1C2C60%-1	24005.10.1	communication time greater than 10s
+/mnt/e/logs-june-6-29-valid-linear/0630193758-net-5499520-130-20-4C8C10%-1	3878.10.1	logs length equal to 5
+/mnt/e/logs-june-6-29-valid-linear/0630205218-net-5499520-130-20-1C2C60%-1	7.34.1	logs length equal to 5
+/mnt/e/logs-june-6-29-valid-linear/0630232059-net-7305600-150-20-4C8C10%-1	452.4.1	communication time greater than 10s
+/mnt/e/logs-june-6-29-valid-linear/0702020908-net-7305600-150-20-1C2C60%-1	35540.19.1	communication time greater than 10s
+/mnt/e/logs-june-6-29-valid-linear/0702035121-net-9367680-170-20-4C8C10%-1	80448.40.1	logs length equal to 5
+ 
+/mnt/e/logs-june-6-29-valid-burst
+------------------
+ 
+/mnt/e/logs-june-7-1-valid-spb-linear
+------------------
+ 
+/mnt/e/logs-june-7-2-valid-all-burst
+------------------
+ 
+/mnt/e/logs-june-7-2-valid-all-linear
+------------------
+/mnt/e/logs-june-7-2-valid-all-linear/0703010814-spb-134400-150-5000	2.20.1	communication time greater than 10s
+/mnt/e/logs-june-7-2-valid-all-linear/0703204136-net-1969280-170-100-1C2C60%-1	12812.27.1	communication time greater than 10s
+ 
+/mnt/e/logs-june-7-3-valid-all-burst
+------------------
+ 
+/mnt/e/logs-june-7-4-valid-spb-moreload
+------------------
+/mnt/e/logs-june-7-4-valid-spb-moreload/0704020527-spb-426624	5.38.1	communication time greater than 10s
+/mnt/e/logs-june-7-4-valid-spb-moreload/0704145330-spb-426624	2.40.1	communication time greater than 10s
+/mnt/e/logs-june-7-4-valid-spb-moreload/0704163617-spb-365696	2.20.1	communication time greater than 10s
+ 
+/mnt/e/logs-june-7-5-valid-spb-moreload
+------------------
+ 
+/mnt/e/logs-copy-3-27-vaild-acc-yield-spb
+------------------
+ 
+/mnt/e/logs-yuzishu-4-29-valid-acc-yield
+------------------
+/mnt/e/logs-yuzishu-4-29-valid-acc-yield/0429190314-net-320000-4C8C10%-1	523.10.1	logs length equal to 5
+/mnt/e/logs-yuzishu-4-29-valid-acc-yield/0429194913-net-256000-10mC20C60%-1	265.27.1	communication time greater than 10s
+/mnt/e/logs-yuzishu-4-29-valid-acc-yield/0430075448-net-196864-1C2C60%-1	1320.8.1	logs length equal to 5
+/mnt/e/logs-yuzishu-4-29-valid-acc-yield/0430175627-net-6400-4C8C10%-1	2.37.1	logs length equal to 5
+/mnt/e/logs-yuzishu-4-29-valid-acc-yield/0430205605-net-320000-10mC20C60%-1	120.12.1	logs length equal to 5
+ 
+/mnt/e/logs-copy-vaild-burst
+------------------
+/mnt/e/logs-copy-vaild-burst/0328064149-net-320000-4C8C10%-1	260.33.1	logs length equal to 5
+ 
+/mnt/e/logs-yuzishu-5-4-k8s-peak-50-speed-1
+------------------
+ 
+/mnt/e/logs-yuzishu-5-1-valid-spb-resort
+------------------
+/mnt/e/logs-yuzishu-5-1-valid-spb-resort/0502013609-spb-211200-230-5000	269.43.1	communication time greater than 10s
