@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import os
 
 FULL = (1 << 8) - 1
-TOTAL = 3949440
+TOTAL = 3185280
 
 
 class Analyzer:
@@ -59,17 +59,21 @@ class Analyzer:
         global TOTAL
         TOTAL = int(prefix.split("-")[-1])
         print("fake_run")
-        files = os.listdir(prefix)
-        log_data = dict()
-        for file in files:
-            url = "http://"+file.replace("-",":").replace(".txt", "")
-            if not url in self.servers:
-                continue
-            path = os.path.join(prefix, file)
-            logs = open(path).readlines()
-            add_logs(url, logs, log_data, self.last_time)
-        log_data_sorted = sort_logs(log_data)
-        print_logs(prefix, "log.txt", log_data_sorted)
+
+        log_data_sorted = load_logs(prefix, "log.txt")
+        if log_data_sorted == None:
+            files = os.listdir(prefix)
+            log_data = dict()
+            for file in files:
+                url = "http://"+file.replace("-",":").replace(".txt", "")
+                if not url in self.servers:
+                    continue
+                path = os.path.join(prefix, file)
+                logs = open(path).readlines()
+                add_logs(url, logs, log_data, self.last_time)
+            log_data_sorted = sort_logs(log_data)
+            print_logs(prefix, "log.txt", log_data_sorted)
+
         proof = proof_data()
         proof.timestamp = datetime.now() + timedelta(hours=8)
         if self.env == "net":
@@ -266,8 +270,23 @@ class event_log:
             log = "[" + time + "] └" + self.event.upper() + " " + self.logger
         log_with_send_recv = log + "  (" + self.send + " -> " + self.recv + ")"
         return log_with_send_recv
-
-
+    def load(self, s:str):
+        import re
+        if "┌" in  s:
+            # print("send")
+            self.event = "send"
+            pattern = "\[(.+)\] ┌SEND (.+)  \((.+) -> (.+)\)"
+        else:
+            # print("recv")
+            self.event = "recv"
+            pattern = "\[(.+)\] └RECV (.+)  \((.+) -> (.+)\)"
+        egex = re.compile(pattern)
+        g = egex.match(s)
+        res = g.groups()
+        self.time = load_time(res[0])
+        self.logger = res[1]
+        self.send = res[2]
+        self.recv = res[3]
 class proof_data:
     def __init__(self):
         self.real_nums = 0
@@ -287,7 +306,18 @@ class proof_data:
         self.BJ_machine2 = 0
         self.NJ_machine1 = 0
         self.NJ_machine2 = 0
-
+        self.NJ_good_ave_latency = 0 #nanjing good任务的平均延迟
+        self.BJ_good_ave_latency = 0 #beijing good任务的平均延迟
+        self.NJ_finished_ave_latency = 0 #nanjing 所有完成的任务的平均延迟
+        self.BJ_finished_ave_latency = 0 #beijing 所有完成的任务的平均延迟
+        self.NJ_all_ave_latency = 0 #nanjing 所有任务的平均延迟
+        self.BJ_all_ave_latency = 0 #beijing 所有任务的平均延迟
+        
+        self.average_good_latency = 0
+        self.average_finished_latency = 0
+        self.average_all_latency = 0
+        self.throughput = 0
+        
     def print_proof(self):
         print(self.timestamp)
         print("Number of Tasks: ", str(self.num_tasks))
@@ -386,8 +416,15 @@ def print_time(time):
     str_time = "(" + s2 + ")" + s1 + " s " + ms + " ms " + us + " us " + ns + " ns"
     # str_time = s1 + " s " + ms + " ms " + us + " us " + ns + " ns"
     return str_time
-
-
+def load_time(s: str):
+    import re
+    pattern = "\(([0-9]+?)\)([0-9]+?) s ([0-9]+?) ms ([0-9]+?) us ([0-9]+?) ns"
+    egex = re.compile(pattern)
+    x = egex.match(s)
+    t = 0
+    for i in x.groups():
+        t = t *1000+int(i)
+    return t
 def fetch_logs(filename):
     logs = []
     with open(filename, "r") as f:
@@ -467,7 +504,67 @@ def print_logs(prefix, filename, log_data_sorted):
         print("-----------------------\n", file=f)
     f.close()
 
+def load_logs(prefix, filename) -> list:
+    if not os.path.exists(prefix + "/" + filename):
+        return None
+    # import time
+    # recent = time.strptime("2022-11-13 00:00:00", "%Y-%m-%d %H:%M:%S")
+    # t =  os.path.getmtime(prefix + "/" + filename)
+    # if t > time.mktime(recent): 
+    #     print(os.getpid(), '====> log file may not correct', prefix + "/" + filename)
+    #     return  None
+    print("use old log file", prefix + "/" + filename)
+    log_data_sorted = []
+    def load_msg_id(s:str)->int:
+        import re
+        pattern = "Message ID .+ \(([0-9]+)\) #Record="
+        egex = re.compile(pattern)
+        g = egex.match(s)
+        res = g.groups()
+        return int(res[0])
 
+    f = open(prefix + "/" + filename, "r", encoding="utf-8")
+    # lines = f.readlines()
+    print("old log file load finish", prefix + "/" + filename)
+    logs = [0,[]]
+    first_line = True
+    next = False
+    # total_length = len(lines)
+    current_length = 0
+    while True:
+        line = f.readline()
+        if line == "":
+            break
+        current_length += 1
+        if current_length & 0b111111111111111111 == 0:
+            print(prefix, current_length)
+        if first_line:
+            if len(line) <=10:
+                continue
+            message_id = load_msg_id(line)
+            # print(message_id)
+            # exit(0)
+            first_line = False
+            logs[0] = message_id
+            continue
+        if "----------" in line:
+            # print("----------")
+            log_data_sorted.append(logs)
+            logs = [0,[]]
+            next = True
+            continue
+        if next:
+            next = False
+            first_line = True
+            continue
+        
+        # print(line)
+        elog = event_log()
+        elog.load(line)
+        
+        logs[1].append(elog)
+    f.close()
+    return log_data_sorted
 # ------------------------------------------------------------
 
 SPB_LEN = 14
@@ -663,7 +760,21 @@ def analyze_quality_spb(log_data_sorted, proof):
     proof.goodput_50 = under_50 / total_time
     proof.goodput_20 = under_20 / total_time
 
-def analyze_quality_spb_v2_all(log_data_sorted, proof, prefix):
+class latencyRecord:
+    def __init__(self) -> None:
+        self.finished_task_latency = 0
+        self.unfinished_task_start_time_sum = 0
+        self.unfinished_task_num = 0
+    def add_unfinished(self, start_time):
+        self.unfinished_task_start_time_sum += start_time
+        self.unfinished_task_num += 1
+    def add_finished(self,duration):
+        self.finished_task_latency +=duration
+    def total_latency(self, last_time):
+        return last_time * self.unfinished_task_num - self.unfinished_task_start_time_sum + self.finished_task_latency
+
+
+def analyze_quality_spb_v2_all(log_data_sorted, proof:proof_data, prefix):
     total = 0
     under_100 = 0
     under_50 = 0
@@ -697,12 +808,24 @@ def analyze_quality_spb_v2_all(log_data_sorted, proof, prefix):
     location_bits = (1<<20) -1
     # print(log_data_sorted)
     task_info_detail = []
+    finished_task_num = 0 # number of task finished
+    finished_task_total_latency = 0 #完成的任务的延迟的和
+    all_task_total_latency = latencyRecord() #所有任务的延迟的和 min(完成时间, 观测时间) - 提交时间
+    good_task_total_latency = 0 #good 任务的延迟的和
+    total_length = len(log_data_sorted)
+    current_length = 0
     for log_data_item in log_data_sorted:
+        current_length += 1
+        if current_length & 0b11111111111111 == 0:
+            print(prefix, current_length / total_length *100,"%")
         qos = 0
         is_good = False
         message_id = (log_data_item[0])>>40
         # if message_id > 10000:
         #     print(message_id)
+        b= (log_data_item[0] >> 20) & ((1 << 20) - 1)
+        if b <= 3: #非物端任务
+            continue
         if message_id >> 23 == 1:  # 干扰消息
             # print("hshsh")
             continue
@@ -724,15 +847,22 @@ def analyze_quality_spb_v2_all(log_data_sorted, proof, prefix):
             if  message_id % 4 == 3:
                 qos_20 += 1
                
-        logs = log_data_item[1]
+        logs:list[event_log] = log_data_item[1]
         if len(logs) != SPB_LEN:
-            # print(logs)
+            # for log in logs:
+            #     print(log.string())
+           
+            index = min(SPB_START_IDX, len(logs)-1)  
+            all_task_total_latency.add_unfinished(logs[index].time)
             continue
+        finished_task_num += 1
         if first_time == 0:
             first_time = logs[SPB_START_IDX].time
         total += 1
         duration = logs[SPB_END_IDX].time - logs[SPB_START_IDX].time
         last_time = logs[SPB_END_IDX].time
+        finished_task_total_latency += duration
+        all_task_total_latency.add_finished(duration)
         if duration < 100000000:
             under_100 += 1
         if duration < 50000000:
@@ -796,9 +926,11 @@ def analyze_quality_spb_v2_all(log_data_sorted, proof, prefix):
                     is_good=True
                     qos_nj_20_good += 1
                 qos_nj_20 += 1
+        if is_good:
+            good_task_total_latency += duration
         task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
     task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))        
-    print("SPB Number: ", total)
+    print("SPB Number/finished: ", total, finished_task_num)
     print("Qos 100: ", qos_100)
     print("Qos 50: ", qos_50)
     print("Qos 20: ", qos_20)
@@ -809,25 +941,31 @@ def analyze_quality_spb_v2_all(log_data_sorted, proof, prefix):
     print("under 100: ", under_100)
     print("under 50: ", under_50)
     print("under 20: ", under_20)
-    print(qos_bj_100_good, qos_bj_50_good ,qos_nj_100_good, qos_nj_50_good, qos_nj_20_good)
-    print(qos_bj_100, qos_bj_50 ,qos_nj_100, qos_nj_50, qos_nj_20)
-    print(BJ_machine1_50, BJ_machine1_50_good)
-    print(BJ_machine2_50, BJ_machine2_50_good)
+    # print(qos_bj_100_good, qos_bj_50_good ,qos_nj_100_good, qos_nj_50_good, qos_nj_20_good)
+    # print(qos_bj_100, qos_bj_50 ,qos_nj_100, qos_nj_50, qos_nj_20)
+    # print(BJ_machine1_50, BJ_machine1_50_good)
+    # print(BJ_machine2_50, BJ_machine2_50_good)
     total = TOTAL
     proof.real_nums = total
     proof.num_tasks = total
+    proof.average_finished_latency = finished_task_total_latency / finished_task_num
     # proof.yield_100 = qos_good_100 / qos_100
     # proof.yield_50 = qos_good_50 / qos_50
     # proof.yield_20 = qos_good_20 / qos_20
     all = qos_100+qos_50+qos_20
+    proof.average_good_latency = good_task_total_latency / all
     proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all 
     total_time = (last_time - first_time) * 1. / 1000000000
+
+    proof.average_all_latency = all_task_total_latency.total_latency(last_time) / total
+    print(all_task_total_latency.unfinished_task_num, all_task_total_latency.unfinished_task_start_time_sum)
+    print("all latency/finished latency", proof.average_all_latency, proof.average_finished_latency)
     proof.goodput_100 = qos_good_100 / total_time
     proof.goodput_50 = qos_good_50 / total_time
     proof.goodput_20 = qos_good_20 / total_time
-  
+    proof.throughput = finished_task_num / total_time
 
 def analyze_quality_spb_v2(log_data_sorted, proof, prefix):
     total = 0
@@ -1359,7 +1497,7 @@ def task_info_detail_to_csv(tasks_info_detail:List, period, path):
 
 
         
-def analyze_quality_net_v2_all(log_data_sorted, proof, prefix):
+def analyze_quality_net_v2_all(log_data_sorted, proof:proof_data, prefix):
     total = 0
     under_100 = 0
     under_50 = 0
@@ -1381,7 +1519,17 @@ def analyze_quality_net_v2_all(log_data_sorted, proof, prefix):
     task_info_detail = []
     num_in_thing = 0
     log_msdID = {}
+    finished_task_num = 0 # number of task finished
+    finished_task_total_latency = 0 #完成的任务的延迟的和
+    good_task_total_latency = 0 #good 任务的延迟的和
+    all_task_total_latency = latencyRecord() #所有任务的延迟的和 min(完成时间, 观测时间) - 提交时间
+
+    total_length = len(log_data_sorted)
+    current_length = 0
     for log_data_item in log_data_sorted:
+        current_length += 1
+        if current_length & 0b11111111111111 == 0:
+            print(prefix, current_length / total_length *100,"%")
         is_good = False
         qos = 0
         message_id = (log_data_item[0])>>40
@@ -1413,16 +1561,21 @@ def analyze_quality_net_v2_all(log_data_sorted, proof, prefix):
         logs = log_data_item[1]
         ll = len(logs)
         if ll != NET_LEN_1 and ll != NET_LEN_2:
+            index = min(NET_START_IDX, len(logs)-1)  
+            all_task_total_latency.add_unfinished(logs[index].time)
             continue
 
         if ll <= NET_START_IDX:
             if ll == 1:
                 num_in_thing += 1
+            index = min(NET_START_IDX, len(logs)-1)  
+            all_task_total_latency.add_unfinished(logs[index].time)
             continue
         if first_time == 0:
             first_time = logs[NET_START_IDX].time
         elif logs[NET_START_IDX].time < first_time:
             first_time = logs[NET_START_IDX].time
+        finished_task_num += 1
         total += 1
         if ll == NET_LEN_1:
             duration = logs[NET_END_IDX_1].time - logs[NET_START_IDX].time
@@ -1430,8 +1583,8 @@ def analyze_quality_net_v2_all(log_data_sorted, proof, prefix):
         else:
             duration = logs[NET_END_IDX_2].time - logs[NET_START_IDX].time
             last_time = logs[NET_END_IDX_2].time
-
-        
+        finished_task_total_latency += duration
+        all_task_total_latency.add_finished(duration)
         if duration < 100000000:
             under_100 += 1
         if duration < 50000000:
@@ -1466,10 +1619,12 @@ def analyze_quality_net_v2_all(log_data_sorted, proof, prefix):
                 if duration < 20000000:
                     qos_good_20 += 1
                     is_good = True
+        if is_good:
+            good_task_total_latency += duration
         task_info_detail_add(task_info_detail, logs[NET_START_IDX].time, qos, is_good)
     task_info_detail_to_csv(task_info_detail, 1000000000, os.path.join(prefix, "task_info_detail.csv"))
     # print("num_in_thing: ", num_in_thing)
-    print(log_msdID)
+    # print(log_msdID)
     print("Number: ", total)
     # print("Qos 100: ", qos_100)
     # print("Qos 50: ", qos_50)
@@ -1485,19 +1640,23 @@ def analyze_quality_net_v2_all(log_data_sorted, proof, prefix):
     total = TOTAL
     proof.real_nums = total
     proof.num_tasks = total
+    proof.average_finished_latency= finished_task_total_latency / finished_task_num
     # proof.yield_100 = qos_good_100 / qos_100
     # proof.yield_50 = qos_good_50 / qos_50
     # proof.yield_20 = qos_good_20 / qos_20
 
     all =  qos_100+qos_50+qos_20
+    proof.average_good_latency = good_task_total_latency / all
     proof.yield_100 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_50 = (qos_good_100+qos_good_50+qos_good_20) / all
     proof.yield_20 = (qos_good_100+qos_good_50+qos_good_20) / all
     total_time = (last_time - first_time) * 1. / 1000000000
+    proof.average_all_latency =  all_task_total_latency.total_latency(last_time) / total
     print("-----", all, total, total_time, qos_good_100+qos_good_50+qos_good_20, qos_100+qos_50+qos_20)
     proof.goodput_100 = qos_good_100 / total_time
     proof.goodput_50 = qos_good_50 / total_time
     proof.goodput_20 = qos_good_20 / total_time
+    proof.throughput = finished_task_num / total_time
 
 
 def analyze_quality_net_v2(log_data_sorted, proof, prefix):
@@ -1934,12 +2093,14 @@ def add_proof_csv(filename, env, proof):
         f.write(res_str)
 
 
-def save_proof_csv(prefix, proof, base):
+def save_proof_csv(prefix, proof:proof_data, base):
+    print("log----- save_proof_csv", "{}/result.csv".format(prefix))
     env = base.replace("src/", "").replace("_base.png", "")
-    res_str = "{},{},{},{},{},{},{},{},{},{}\n".format(
+    res_str = "{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n".format(
         env, str(proof.timestamp), str(proof.num_tasks), str(proof.real_nums),
         proof.yield_100 * 100, proof.yield_50 * 100, proof.yield_20 * 100,
-        proof.goodput_100, proof.goodput_50, proof.goodput_20)
+        proof.goodput_100, proof.goodput_50, proof.goodput_20, proof.throughput, 
+        proof.average_finished_latency, proof.average_good_latency, proof.average_all_latency)
     with open("{}/result.csv".format(prefix), "w") as f:
         f.write(res_str)
     with open("{}/../result.csv".format(prefix), "a") as f:

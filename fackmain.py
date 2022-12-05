@@ -1,8 +1,5 @@
 import sys
 import json
-import asyncio
-import websockets
-from time import time
 
 from src.message import Message, MessageType
 from src.analyzer import Analyzer
@@ -37,6 +34,7 @@ def start(conf_path, prefix):
     try:
         serve()
     except Exception as err:
+        print("start error: %s" % err)
         f = open("log", "a")
         f.write(prefix+"\n")
         f.close()

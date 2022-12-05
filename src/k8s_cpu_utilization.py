@@ -20,6 +20,9 @@ def cal_pos_cpu(path, noise):
 
         rows = []
         for line in lines:
+            if len(line.split(',')) < 2:
+                print(line)
+                continue
             rows.append(line.split(','))
         if len(rows) == 0:
             continue

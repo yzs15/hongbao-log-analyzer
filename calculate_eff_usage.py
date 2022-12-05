@@ -48,6 +48,7 @@ def calculate_eff_usage(parent, env, time_interval):
     msg_chains = load_logs_from_dir(log_dirpath, 0)  #type: list[(int, list[event_log])]
 
     timeline = {}
+    # no_est_timeline = {}
     for msg_id, logs in msg_chains:
         if check_noise(msg_id) or check_warm(msg_id) or check_person(msg_id):
             continue
@@ -73,32 +74,38 @@ def calculate_eff_usage(parent, env, time_interval):
             continue
         
         location = get_location(msg_id)
-        if env == 'net':
-            need_time = net_exec_time[location-1]
-            resp_time = ts_end - ts_start - 1
-            add2timeline(timeline, ts_start, resp_time, need_time/resp_time, location, time_interval)
-        elif env == 'spb':
-            ts_valid_start = logs[8].time
-            ts_valid_end = logs[9].time
-            valid_time = ts_valid_end - ts_valid_start - 1
-            add2timeline(timeline, ts_valid_start, valid_time, 1, location, time_interval)
+        need_time = net_exec_time[location-1]
+        resp_time = ts_end - ts_start - 1
+        add2timeline(timeline, ts_start, resp_time, need_time/resp_time, location, time_interval)
+        # if env == 'spb':
+        #     ts_valid_start = logs[8].time
+        #     ts_valid_end = logs[9].time
+        #     valid_time = ts_valid_end - ts_valid_start - 1
+        #     add2timeline(no_est_timeline, ts_valid_start, valid_time, 1, location, time_interval)
 
-    timeline_list = list(timeline.items())
-    timeline_list.sort(key=lambda x: x[0])
+    def build_timeline(timeline):
+        timeline_list = list(timeline.items())
+        timeline_list.sort(key=lambda x: x[0])
+        ts_min = timeline_list[0][0]
+        ts_max = timeline_list[len(timeline_list)-1][0]
 
-    ts_min = timeline_list[0][0]
-    ts_max = timeline_list[len(timeline_list)-1][0]
+        i_timeline = 0
+        finial_timeline = []
+        for ts_cur in range(ts_min, ts_max+1):
+            # ts, eff_bj, eff_nj, eff_all, eff_no_est_bj, eff_no_est_nj, eff_no_est_all
+            record = [ts_cur, 0, 0, 0, 0, 0, 0]
+            if ts_cur == timeline_list[i_timeline][0]:
+                record[1:3] = timeline_list[i_timeline][1][0:2]
+                record[3] = sum(record[1:3])
+                i_timeline += 1
+            for i in range(1, 4):
+                record[i] = record[i] / time_interval
+            finial_timeline.append(record)
+        return finial_timeline
+    
+    finial_timeline = build_timeline(timeline)
+    # finial_no_est_timeline = None
+    # if env == 'spb':
+    #     finial_no_est_timeline = build_timeline(no_est_timeline)
 
-    i_timeline = 0
-    finial_timeline = []
-    for ts_cur in range(ts_min, ts_max+1):
-        # ts, eff_bj, eff_nj, eff_all
-        record = [ts_cur, 0, 0, 0]
-        if ts_cur == timeline_list[i_timeline][0]:
-            record[1:3] = timeline_list[i_timeline][1][0:2]
-            record[3] = sum(record[1:3])
-            i_timeline += 1
-        for i in range(1, 4):
-            record[i] = record[i] / time_interval
-        finial_timeline.append(record)
     return finial_timeline
